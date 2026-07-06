@@ -2,12 +2,11 @@
 
 ## Descripción
 
-Barbería es una aplicación web desarrollada con Flutter y Firebase que permite a los clientes reservar turnos de manera online y a los administradores gestionar servicios, horarios y reservas.
+Barbería es una pagina web desarrollada con Flutter y Firebase que permite a los clientes reservar turnos de manera online y a los administradores gestionar servicios, horarios y reservas.
 
 ## Integrantes
 
 - Sara Nicole Lucero
-- (Agregar los demás integrantes si corresponde)
 
 ## Tecnologías utilizadas
 
@@ -30,7 +29,7 @@ flutter pub get
 4. Ejecutar:
 
 ```bash
-flutter run -d chrome
+flutter run -d web-server
 ```
 
 ## Estado del proyecto
