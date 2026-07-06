@@ -1,17 +1,54 @@
-# barberia
+# Barbería
 
-A new Flutter project.
+## Descripción
 
-## Getting Started
+Barbería es una aplicación web desarrollada con Flutter y Firebase que permite a los clientes reservar turnos de manera online y a los administradores gestionar servicios, horarios y reservas.
 
-This project is a starting point for a Flutter application.
+## Integrantes
 
-A few resources to get you started if this is your first Flutter project:
+- Sara Nicole Lucero
+- (Agregar los demás integrantes si corresponde)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Tecnologías utilizadas
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Flutter
+- Dart
+- Firebase Authentication
+- Cloud Firestore
+- Flutter Web
+
+## Instalación
+
+1. Clonar el repositorio.
+2. Ejecutar:
+
+```bash
+flutter pub get
+```
+
+3. Configurar Firebase.
+4. Ejecutar:
+
+```bash
+flutter run -d chrome
+```
+
+## Estado del proyecto
+
+Actualmente se encuentra en desarrollo.
+
+### Funcionalidades implementadas
+
+- Inicio de sesión.
+- Registro de usuarios.
+- Gestión de roles.
+- Reserva de turnos.
+- Panel de administración.
+- Gestión de agenda.
+
+### Funcionalidades pendientes
+
+- Mejoras en la interfaz.
+- Notificaciones.
+-Cancelaciones de reservas.
+- Optimización del sistema.
