@@ -65,8 +65,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final rol = await _authService.login(email, password);
-      _user = _authService.currentUser;
-      _rol = rol;
       return rol;
     } finally {
       _isLoading = false;

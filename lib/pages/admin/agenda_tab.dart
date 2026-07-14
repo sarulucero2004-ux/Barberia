@@ -74,7 +74,7 @@ class _AgendaTabState extends State<AgendaTab> {
           const SizedBox(height: 24),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: adminProvider.getAppointmentsStream(),
+              stream: adminProvider.getAppointmentsStream(date: _formattedDate),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(

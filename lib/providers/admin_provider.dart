@@ -43,8 +43,8 @@ class AdminProvider extends ChangeNotifier {
   }
 
   // ── Appointments ──────────────────────────────────────────────────────────
-  Stream<QuerySnapshot> getAppointmentsStream() {
-  return _firestoreService.getAppointmentsStream();
+  Stream<QuerySnapshot> getAppointmentsStream({String? date}) {
+    return _firestoreService.getAppointmentsStream(date: date);
   }
 
   Stream<QuerySnapshot> getServicesStream() {

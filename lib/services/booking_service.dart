@@ -29,12 +29,6 @@ class BookingService {
     required String date,
     required String time,
   }) async {
-    final startTime = time.split(' - ').first;
-    final isBooked = await _firestoreService.checkExistingBooking(date, barber.id, startTime);
-    if (isBooked) {
-      throw Exception('Este horario ya está reservado. Por favor, selecciona otro.');
-    }
-
     final appointment = Appointment(
       id: '',
       userId: userId,
@@ -50,6 +44,7 @@ class BookingService {
       time: time,
     );
 
+    // saveAppointment maneja la transacción y arroja error si ya está reservado
     await _firestoreService.saveAppointment(appointment);
 
     await _whatsAppService.sendBookingMessage(appointment);

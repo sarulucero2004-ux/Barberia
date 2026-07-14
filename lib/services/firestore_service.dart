@@ -57,21 +57,59 @@ class FirestoreService {
 
   Future<void> saveAppointment(Appointment appointment) async {
     try {
-      await _db.collection('turnos').add({
-        ...appointment.toMap(),
-        'timestamp': FieldValue.serverTimestamp(),
+      final startTime = appointment.time.split(' - ').first;
+      final parsedDate = appointment.getParsedDateTime() ?? DateTime.now();
+
+      // Generar un ID único determinista basado en el barbero, la fecha y la hora del turno
+      final slotId = '${appointment.barberId}_${appointment.date}_$startTime'
+          .replaceAll(' ', '_')
+          .replaceAll('/', '_');
+
+      final docRef = _db.collection('turnos').doc(slotId);
+
+      await _db.runTransaction((transaction) async {
+        // Realizar la lectura previa (get) por referencia de documento en la transacción
+        final docSnapshot = await transaction.get(docRef);
+
+        if (docSnapshot.exists) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'already-booked',
+            message: 'El turno acaba de ser reservado por alguien más',
+          );
+        }
+
+        // Guardar el turno en la transacción
+        transaction.set(docRef, {
+          ...appointment.toMap(),
+          'appointmentDateTime': Timestamp.fromDate(parsedDate),
+          'timestamp': FieldValue.serverTimestamp(),
+        });
       });
     } on FirebaseException catch (e) {
+      if (e.code == 'already-booked') {
+        throw Exception('El turno acaba de ser reservado por alguien más');
+      }
       throw Exception('Error al guardar el turno: ${e.message}');
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error inesperado al guardar el turno.');
     }
   }
 
-  Stream<QuerySnapshot> getAppointmentsStream() {
+  Stream<QuerySnapshot> getAppointmentsStream({String? date}) {
+    if (date != null) {
+      return _db
+          .collection('turnos')
+          .where('date', isEqualTo: date)
+          .snapshots();
+    }
+    // Para la lista general de turnos, filtramos los que tengan fecha de hoy en adelante
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
     return _db
         .collection('turnos')
-        .orderBy('timestamp', descending: true)
+        .where('appointmentDateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
         .snapshots();
   }
 

@@ -2,7 +2,7 @@ import 'appointment_status.dart';
 
 class Appointment {
   final String id;
-  final String userId;
+  final String? userId;
   final String customerName;
   final String customerEmail;
   final String barberId;
@@ -17,7 +17,7 @@ class Appointment {
 
   Appointment({
     required this.id,
-    required this.userId,
+    this.userId,
     required this.customerName,
     required this.customerEmail,
     required this.barberId,
@@ -52,7 +52,7 @@ class Appointment {
   factory Appointment.fromMap(Map<String, dynamic> map, String docId) {
     return Appointment(
       id: docId,
-      userId: map['userId'] ?? '',
+      userId: map['userId'],
       customerName: map['customerName'] ?? '',
       customerEmail: map['customerEmail'] ?? '',
       barberId: map['barberId'] ?? '',
@@ -97,5 +97,30 @@ class Appointment {
       time: time ?? this.time,
       status: status ?? this.status,
     );
+  }
+
+  DateTime? getParsedDateTime() {
+    try {
+      final months = {
+        'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+        'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+      };
+      final cleanDate = date.toLowerCase().trim();
+      final parts = cleanDate.split(' de ');
+      if (parts.length == 3) {
+        final day = int.parse(parts[0]);
+        final monthStr = parts[1];
+        final year = int.parse(parts[2]);
+        final month = months[monthStr] ?? 1;
+
+        final startTimeStr = time.split(' - ').first;
+        final timeParts = startTimeStr.split(':');
+        final hour = int.parse(timeParts[0]);
+        final minute = int.parse(timeParts[1]);
+
+        return DateTime(year, month, day, hour, minute);
+      }
+    } catch (_) {}
+    return null;
   }
 }

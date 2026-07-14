@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -17,25 +18,39 @@ class AuthService {
     required String nombre,
     required String apellido,
   }) async {
+    User? createdUser;
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      final user = credential.user;
-      if (user == null) {
+      createdUser = credential.user;
+      if (createdUser == null) {
         throw Exception('No se pudo crear el usuario. Intente nuevamente.');
       }
 
-      await _db.collection('usuarios').doc(user.uid).set({
-        'uid': user.uid,
-        'nombre': nombre,
-        'apellido': apellido,
-        'email': email,
-        'rol': 'cliente',
-        'fechaRegistro': FieldValue.serverTimestamp(),
-      });
+      try {
+        await _db.collection('usuarios').doc(createdUser.uid).set({
+          'uid': createdUser.uid,
+          'nombre': nombre,
+          'apellido': apellido,
+          'email': email,
+          'rol': 'cliente',
+          'fechaRegistro': FieldValue.serverTimestamp(),
+        });
+      } catch (firestoreError) {
+        // Si la escritura en Firestore falla por cualquier motivo, capturar la excepción,
+        // ejecutar obligatoriamente user.delete() en Firebase Auth para revertir la creación,
+        // y lanzar una excepción personalizada hacia la UI.
+        try {
+          await createdUser.delete();
+        } catch (deleteError) {
+          // Si falla el delete, simplemente lo registramos pero propagamos el error principal de Firestore
+          debugPrint('Error al revertir creación de usuario en Firebase Auth: $deleteError');
+        }
+        throw Exception('Error al guardar el perfil en la base de datos. Registro cancelado.');
+      }
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
         case 'email-already-in-use':
