@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../pages/admin_panel.dart';
 import '../screens/login_screen.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -68,6 +69,23 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                   if (authProvider.isLoggedIn)
                     Row(
                       children: [
+                        if (authProvider.isAdmin) ...[
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4AF37),
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            ),
+                            icon: const Icon(Icons.admin_panel_settings, size: 18),
+                            label: const Text('Panel Admin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AdminPanel()),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         Text(
                           'Hola, ${authProvider.nombre}',
                           style: const TextStyle(color: Colors.white70, fontSize: 14),

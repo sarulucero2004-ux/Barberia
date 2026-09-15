@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/appointment_status.dart';
 import '../services/firestore_service.dart';
@@ -128,6 +129,10 @@ class AdminProvider extends ChangeNotifier {
       'especialidad': specialty,
       'puntuacion': rating,
     });
+  }
+
+  Future<String> uploadBarberImage(Uint8List bytes, String fileName) async {
+    return await _firestoreService.uploadBarberImage(bytes, fileName);
   }
 
   Future<void> deleteBarber(String barberId) async {

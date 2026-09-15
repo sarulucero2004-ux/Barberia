@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/appointment.dart';
 import '../models/appointment_status.dart';
 import '../models/barber.dart';
@@ -6,6 +8,7 @@ import '../models/service.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // ── User ──────────────────────────────────────────────────────────────────
 
@@ -40,8 +43,44 @@ class FirestoreService {
 
   // ── Barbers (public) ──────────────────────────────────────────────────────
 
+  Future<void> seedInitialBarbersIfEmpty() async {
+    try {
+      final snapshot = await _db.collection('barberos').limit(1).get();
+      if (snapshot.docs.isEmpty) {
+        final initialBarbers = [
+          {
+            'nombre': 'Ezequiel',
+            'telefono': '5491141948792',
+            'imagenUrl': 'assets/images/barber_ezequiel.png',
+            'especialidad': 'Cortes clásicos, degradados & afeitados tradicionales',
+            'puntuacion': 4.9,
+          },
+          {
+            'nombre': 'Isaías',
+            'telefono': '5491134855509',
+            'imagenUrl': 'assets/images/barber_isaias.png',
+            'especialidad': 'Diseño de barba, perfilados & peinados vintage',
+            'puntuacion': 4.8,
+          },
+        ];
+
+        final batch = _db.batch();
+        for (var barber in initialBarbers) {
+          final docRef = _db.collection('barberos').doc();
+          batch.set(docRef, barber);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      // Si falla por permisos o desconexión, continuar sin interrumpir
+      // ignore: avoid_print
+      print('Aviso al autopoblar barberos: $e');
+    }
+  }
+
   Future<List<Barber>> getBarbers() async {
     try {
+      await seedInitialBarbersIfEmpty();
       final snapshot = await _db.collection('barberos').get();
       return snapshot.docs.map((doc) {
         return Barber.fromMap(doc.data(), doc.id);
@@ -302,6 +341,31 @@ class FirestoreService {
 
   Stream<QuerySnapshot> getBarbersStream() {
     return _db.collection('barberos').snapshots();
+  }
+
+  Stream<List<Barber>> getBarbersListStream() {
+    seedInitialBarbersIfEmpty();
+    return _db.collection('barberos').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Barber.fromMap(doc.data(), doc.id)).toList();
+    });
+  }
+
+  Future<String> uploadBarberImage(Uint8List bytes, String fileName) async {
+    try {
+      final ref = _storage
+          .ref()
+          .child('barberos')
+          .child('${DateTime.now().millisecondsSinceEpoch}_$fileName');
+      final uploadTask = await ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      return await uploadTask.ref.getDownloadURL();
+    } on FirebaseException catch (e) {
+      throw Exception('Error al subir imagen del barbero: ${e.message}');
+    } catch (e) {
+      throw Exception('Error inesperado al subir la imagen.');
+    }
   }
 
   Future<void> addBarber(Map<String, dynamic> data) async {

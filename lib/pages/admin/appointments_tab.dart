@@ -62,6 +62,11 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
 
                 appointments = _applyFilters(appointments);
                 appointments.sort((a, b) {
+                  final dtA = a.getParsedDateTime();
+                  final dtB = b.getParsedDateTime();
+                  if (dtA != null && dtB != null) {
+                    return dtB.compareTo(dtA);
+                  }
                   final dateCmp = b.date.compareTo(a.date);
                   if (dateCmp != 0) return dateCmp;
                   return b.time.compareTo(a.time);

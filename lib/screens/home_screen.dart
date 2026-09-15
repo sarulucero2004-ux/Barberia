@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../models/barber.dart';
 import '../models/service.dart';
+import '../providers/booking_provider.dart';
 import '../widgets/about_us_section.dart';
 import '../widgets/booking_form.dart';
 import '../widgets/custom_app_bar.dart';
@@ -20,26 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
 
-  final List<Barber> _barbers = [
-    Barber(
-      id: 'b1',
-      name: 'Ezequiel',
-      imageUrl: 'assets/images/barber_ezequiel.png',
-      specialty: 'Cortes clásicos, degradados & afeitados tradicionales',
-      rating: 4.9,
-      phone: '5491141948792',
-    ),
-    Barber(
-      id: 'b2',
-      name: 'Isaías',
-      imageUrl: 'assets/images/barber_isaias.png',
-      specialty: 'Diseño de barba, perfilados & peinados vintage',
-      rating: 4.8,
-      phone: '5491134855509',
-    ),
-  ];
-
-  final List<Service> _services = [
+  static final List<Service> _defaultServices = [
     Service(
       id: 's1',
       name: 'Corte de cabello',
@@ -75,6 +57,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final double _servicesHeight = 700.0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final bookingProvider = context.read<BookingProvider>();
+      bookingProvider.loadServices();
+      bookingProvider.loadBarbers();
+    });
+  }
+
+  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
@@ -91,6 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bookingProvider = context.watch<BookingProvider>();
+    final barbers = bookingProvider.barbers;
+    final services = bookingProvider.services.isNotEmpty
+        ? bookingProvider.services
+        : _defaultServices;
+
     return Scaffold(
       appBar: CustomAppBar(
         scrollController: _scrollController,
@@ -124,11 +122,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             HeroSection(onReservePressed: _scrollToBooking),
-            AboutUsSection(barbers: _barbers),
-            ServicesSection(services: _services),
+            AboutUsSection(barbers: barbers),
+            ServicesSection(services: services),
             BookingForm(
-              barbers: _barbers,
-              services: _services,
+              barbers: barbers,
+              services: services,
             ),
             _buildFooter(),
           ],

@@ -18,6 +18,7 @@ class BookingProvider extends ChangeNotifier {
   bool _isSaving = false;
 
   StreamSubscription<List<Appointment>>? _appointmentsSubscription;
+  StreamSubscription<List<Barber>>? _barbersSubscription;
   final Set<String> _bookedTimes = {};
 
   Barber? _pendingBarber;
@@ -47,6 +48,14 @@ class BookingProvider extends ChangeNotifier {
   })  : _bookingService = bookingService,
         _firestoreService = firestoreService {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(_onAuthStateChanged);
+    _listenToBarbers();
+  }
+
+  void _listenToBarbers() {
+    _barbersSubscription = _firestoreService.getBarbersListStream().listen((barbers) {
+      _barbers = barbers;
+      notifyListeners();
+    });
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
@@ -214,6 +223,7 @@ class BookingProvider extends ChangeNotifier {
   @override
   void dispose() {
     _appointmentsSubscription?.cancel();
+    _barbersSubscription?.cancel();
     _authSubscription?.cancel();
     super.dispose();
   }

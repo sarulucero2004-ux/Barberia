@@ -106,14 +106,28 @@ class AboutUsSection extends StatelessWidget {
           // Imagen del Barbero
           AspectRatio(
             aspectRatio: 4 / 3,
-            child: Image.asset(
-              barber.imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                color: Colors.grey[800],
-                child: const Icon(Icons.person, size: 64, color: Colors.white54),
-              ),
-            ),
+            child: barber.imageUrl.startsWith('http')
+                ? Image.network(
+                    barber.imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey[800],
+                      child: const Icon(Icons.person, size: 64, color: Colors.white54),
+                    ),
+                  )
+                : (barber.imageUrl.isNotEmpty
+                    ? Image.asset(
+                        barber.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[800],
+                          child: const Icon(Icons.person, size: 64, color: Colors.white54),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[800],
+                        child: const Icon(Icons.person, size: 64, color: Colors.white54),
+                      )),
           ),
           Padding(
             padding: const EdgeInsets.all(24.0),
@@ -145,14 +159,6 @@ class AboutUsSection extends StatelessWidget {
                   children: [
                     const Icon(Icons.star, color: Color(0xFFD4AF37), size: 18),
                     const SizedBox(width: 4),
-                    Text(
-                      barber.rating.toString(),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
                     const SizedBox(width: 4),
                     const Text(
                       '/ 5.0 (Reseñas)',

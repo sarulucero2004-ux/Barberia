@@ -4,7 +4,6 @@ class Barber {
   final String phone;
   final String imageUrl;
   final String specialty;
-  final double rating;
 
   Barber({
     required this.id,
@@ -12,7 +11,6 @@ class Barber {
     required this.phone,
     required this.imageUrl,
     required this.specialty,
-    required this.rating,
   });
 
   Map<String, dynamic> toMap() {
@@ -21,7 +19,6 @@ class Barber {
       'telefono': phone,
       'imagenUrl': imageUrl,
       'especialidad': specialty,
-      'puntuacion': rating,
     };
   }
 
@@ -31,8 +28,6 @@ class Barber {
       name: map['nombre'] ?? '',
       phone: map['telefono'] ?? '',
       imageUrl: map['imagenUrl'] ?? '',
-      specialty: map['especialidad'] ?? '',
-      rating: (map['puntuacion'] ?? 0.0).toDouble(),
-    );
+      specialty: map['especialidad'] ?? '');
   }
 }

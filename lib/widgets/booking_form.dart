@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/appointment.dart';
 import '../models/barber.dart';
 import '../models/service.dart';
 import '../models/time_slot.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/booking_provider.dart';
+import '../services/whatsapp_service.dart';
 
 import 'login_modal.dart';
 
@@ -74,6 +76,26 @@ class _BookingFormState extends State<BookingForm> {
   }
 
   @override
+  void didUpdateWidget(covariant BookingForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.services != oldWidget.services) {
+      _dynamicServices = widget.services;
+      if (_selectedService == null || !_dynamicServices.any((s) => s.id == _selectedService?.id)) {
+        if (_dynamicServices.isNotEmpty) {
+          _selectedService = _dynamicServices.first;
+        }
+      }
+    }
+    if (widget.barbers != oldWidget.barbers) {
+      if (_selectedBarber == null || !widget.barbers.any((b) => b.id == _selectedBarber?.id)) {
+        if (widget.barbers.isNotEmpty) {
+          _selectedBarber = widget.barbers.first;
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _carouselScrollController.dispose();
     _timeScrollController.dispose();
@@ -87,8 +109,19 @@ class _BookingFormState extends State<BookingForm> {
       '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
     ];
 
-    return List.generate(hours.length, (index) {
-      final start = hours[index];
+    final now = DateTime.now();
+    final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
+
+    final availableHours = hours.where((start) {
+      if (!isToday) return true;
+      final parts = start.split(':');
+      final hr = int.parse(parts[0]);
+      final min = int.parse(parts[1]);
+      final slotTime = DateTime(now.year, now.month, now.day, hr, min);
+      return slotTime.isAfter(now);
+    }).toList();
+
+    return availableHours.map((start) {
       final parts = start.split(':');
       int hr = int.parse(parts[0]);
       int min = int.parse(parts[1]) + 30;
@@ -103,7 +136,7 @@ class _BookingFormState extends State<BookingForm> {
         endTime: end,
         isAvailable: true,
       );
-    });
+    }).toList();
   }
 
   void _scrollCarousel(bool goRight) {
@@ -161,13 +194,14 @@ class _BookingFormState extends State<BookingForm> {
 
     final formattedDate = "${_selectedDate.day} de ${_monthsFull[_selectedDate.month - 1]} de ${_selectedDate.year}";
     final formattedTime = "${_selectedTimeSlot!.startTime} - ${_selectedTimeSlot!.endTime}";
+    final customerName = authProvider.nombreCompleto.trim().isNotEmpty
+        ? authProvider.nombreCompleto
+        : authProvider.email;
 
     try {
       await bookingProvider.confirmBooking(
         userId: authProvider.uid,
-        customerName: authProvider.nombreCompleto.isNotEmpty
-            ? authProvider.nombreCompleto
-            : authProvider.email,
+        customerName: customerName,
         customerEmail: authProvider.email,
         barber: _selectedBarber!,
         service: _selectedService!,
@@ -178,6 +212,21 @@ class _BookingFormState extends State<BookingForm> {
       if (!mounted) return;
 
       _loadBookedTimesForCurrentSelection();
+
+      final appointmentToNotify = Appointment(
+        id: '',
+        userId: authProvider.uid,
+        customerName: customerName,
+        customerEmail: authProvider.email,
+        barberId: _selectedBarber!.id,
+        barberName: _selectedBarber!.name,
+        barberPhone: _selectedBarber!.phone,
+        serviceId: _selectedService!.id,
+        serviceName: _selectedService!.name,
+        servicePrice: _selectedService!.price,
+        date: formattedDate,
+        time: formattedTime,
+      );
 
       showDialog(
         context: context,
@@ -197,7 +246,7 @@ class _BookingFormState extends State<BookingForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Cliente: $formattedDate', style: const TextStyle(color: Colors.white70)),
+              Text('Cliente: $customerName', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 8),
               Text('Servicio: ${_selectedService?.name}', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 8),
@@ -208,12 +257,23 @@ class _BookingFormState extends State<BookingForm> {
               Text('Horario: $formattedTime hs', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 16),
               const Text(
-                'Al presionar ENTENDIDO serás redirigido a WhatsApp para notificar a tu barbero.',
+                'Presioná "NOTIFICAR POR WHATSAPP" para avisarle a tu barbero.',
                 style: TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ],
           ),
           actions: [
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.send, size: 18),
+              label: const Text('NOTIFICAR POR WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              onPressed: () {
+                WhatsAppService().sendBookingMessage(appointmentToNotify);
+              },
+            ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();

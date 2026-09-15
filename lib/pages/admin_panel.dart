@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/admin_provider.dart';
+import '../screens/home_screen.dart';
 import 'admin/dashboard_tab.dart';
 import 'admin/appointments_tab.dart';
 import 'admin/agenda_tab.dart';
@@ -65,7 +66,11 @@ class _AdminPanelState extends State<AdminPanel> {
 
     if (!authProvider.isAdmin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacementNamed('/');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const HomeScreen(firebaseInitialized: true),
+          ),
+        );
       });
       return const Scaffold(
         backgroundColor: Color(0xFF121212),
@@ -174,7 +179,11 @@ class _AdminPanelState extends State<AdminPanel> {
             ),
             onTap: () {
               context.read<AuthProvider>().logout();
-              Navigator.of(context).pushReplacementNamed('/');
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => const HomeScreen(firebaseInitialized: true),
+                ),
+              );
             },
             dense: true,
           ),
