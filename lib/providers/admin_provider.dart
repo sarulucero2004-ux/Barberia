@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/appointment_status.dart';
 import '../services/firestore_service.dart';
@@ -108,31 +107,21 @@ class AdminProvider extends ChangeNotifier {
   // ── Barbers ───────────────────────────────────────────────────────────────
 
   Future<void> addBarber(
-      String name, String phone, String imageUrl, String specialty,
-      double rating) async {
+      String name, String phone, String specialty) async {
     await _firestoreService.addBarber({
       'nombre': name,
       'telefono': phone,
-      'imagenUrl': imageUrl,
       'especialidad': specialty,
-      'puntuacion': rating,
     });
   }
 
   Future<void> updateBarber(
-      String barberId, String name, String phone, String imageUrl,
-      String specialty, double rating) async {
+      String barberId, String name, String phone, String specialty) async {
     await _firestoreService.updateBarber(barberId, {
       'nombre': name,
       'telefono': phone,
-      'imagenUrl': imageUrl,
       'especialidad': specialty,
-      'puntuacion': rating,
     });
-  }
-
-  Future<String> uploadBarberImage(Uint8List bytes, String fileName) async {
-    return await _firestoreService.uploadBarberImage(bytes, fileName);
   }
 
   Future<void> deleteBarber(String barberId) async {

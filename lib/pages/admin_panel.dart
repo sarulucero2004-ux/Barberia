@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../providers/admin_provider.dart';
 import '../screens/home_screen.dart';
-import 'admin/dashboard_tab.dart';
 import 'admin/appointments_tab.dart';
 import 'admin/agenda_tab.dart';
 import 'admin/services_tab.dart';
@@ -20,7 +18,6 @@ class _AdminPanelState extends State<AdminPanel> {
   int _selectedIndex = 0;
 
   static const List<String> _titles = [
-    'Panel de Control',
     'Turnos',
     'Agenda',
     'Servicios',
@@ -28,7 +25,6 @@ class _AdminPanelState extends State<AdminPanel> {
   ];
 
   static const List<IconData> _icons = [
-    Icons.dashboard,
     Icons.calendar_today,
     Icons.schedule,
     Icons.content_cut,
@@ -36,29 +32,11 @@ class _AdminPanelState extends State<AdminPanel> {
   ];
 
   final List<Widget> _pages = const [
-    DashboardTab(),
     AppointmentsTab(),
     AgendaTab(),
     ServicesTab(),
     BarbersTab(),
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().loadDashboardStats(_todayDate());
-    });
-  }
-
-  String _todayDate() {
-    final now = DateTime.now();
-    final months = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-    return '${now.day} de ${months[now.month - 1]} de ${now.year}';
-  }
 
   @override
   Widget build(BuildContext context) {

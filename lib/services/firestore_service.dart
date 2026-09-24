@@ -51,16 +51,12 @@ class FirestoreService {
           {
             'nombre': 'Ezequiel',
             'telefono': '5491141948792',
-            'imagenUrl': 'assets/images/barber_ezequiel.png',
             'especialidad': 'Cortes clásicos, degradados & afeitados tradicionales',
-            'puntuacion': 4.9,
           },
           {
             'nombre': 'Isaías',
             'telefono': '5491134855509',
-            'imagenUrl': 'assets/images/barber_isaias.png',
             'especialidad': 'Diseño de barba, perfilados & peinados vintage',
-            'puntuacion': 4.8,
           },
         ];
 

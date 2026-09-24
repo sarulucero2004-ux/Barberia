@@ -1,8 +1,6 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/barber.dart';
 
@@ -178,17 +176,19 @@ class _BarberCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: Colors.white12,
-              backgroundImage: barber.imageUrl.startsWith('http')
-                  ? NetworkImage(barber.imageUrl) as ImageProvider
-                  : (barber.imageUrl.isNotEmpty
-                      ? AssetImage(barber.imageUrl) as ImageProvider
-                      : null),
-              child: barber.imageUrl.isEmpty
-                  ? const Icon(Icons.person, color: Colors.white54, size: 28)
-                  : null,
+            ClipOval(
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: Image.asset(
+                  barber.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.white12,
+                    child: const Icon(Icons.person, color: Colors.white54, size: 28),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(width: 20),
             Expanded(
@@ -216,17 +216,11 @@ class _BarberCard extends StatelessWidget {
             const SizedBox(width: 24),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Color(0xFFD4AF37), size: 16),
-                    const SizedBox(width: 4),
-                  ],
-                ),
-                const SizedBox(height: 4),
                 Text(
                   barber.phone,
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ],
             ),
@@ -262,11 +256,7 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
   late TextEditingController _phoneCtrl;
-  late TextEditingController _imageUrlCtrl;
   late TextEditingController _specialtyCtrl;
-  late TextEditingController _ratingCtrl;
-  Uint8List? _selectedImageBytes;
-  String? _selectedImageName;
   bool _isSaving = false;
 
   @override
@@ -274,7 +264,6 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.barber?.name ?? '');
     _phoneCtrl = TextEditingController(text: widget.barber?.phone ?? '');
-    _imageUrlCtrl = TextEditingController(text: widget.barber?.imageUrl ?? '');
     _specialtyCtrl = TextEditingController(text: widget.barber?.specialty ?? '');
   }
 
@@ -282,82 +271,11 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _imageUrlCtrl.dispose();
     _specialtyCtrl.dispose();
-    _ratingCtrl.dispose();
     super.dispose();
   }
 
   bool get isEditing => widget.barber != null;
-
-  Future<void> _pickImage() async {
-    try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
-      );
-      if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        setState(() {
-          _selectedImageBytes = bytes;
-          _selectedImageName = picked.name;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al seleccionar imagen: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildImageSelector() {
-    ImageProvider? imageProvider;
-    if (_selectedImageBytes != null) {
-      imageProvider = MemoryImage(_selectedImageBytes!);
-    } else if (_imageUrlCtrl.text.startsWith('http')) {
-      imageProvider = NetworkImage(_imageUrlCtrl.text);
-    } else if (_imageUrlCtrl.text.isNotEmpty) {
-      imageProvider = AssetImage(_imageUrlCtrl.text);
-    }
-
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 28,
-          backgroundColor: const Color(0xFF2A2A2A),
-          backgroundImage: imageProvider,
-          child: imageProvider == null
-              ? const Icon(Icons.person, color: Colors.white54, size: 28)
-              : null,
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFD4AF37),
-              side: const BorderSide(color: Color(0xFFD4AF37)),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            icon: const Icon(Icons.image_outlined, size: 18),
-            label: Text(
-              _selectedImageName != null ? 'Imagen Seleccionada' : 'Subir Imagen (Galería)',
-              style: const TextStyle(fontSize: 13),
-              overflow: TextOverflow.ellipsis,
-            ),
-            onPressed: _pickImage,
-          ),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -375,8 +293,6 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildImageSelector(),
-                const SizedBox(height: 16),
                 TextFormField(
                   controller: _nameCtrl,
                   style: const TextStyle(color: Colors.white),
@@ -392,31 +308,11 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: _imageUrlCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration('URL de imagen o ruta asset (Opcional)'),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
                   controller: _specialtyCtrl,
                   style: const TextStyle(color: Colors.white),
                   decoration: _inputDecoration('Especialidad'),
                   maxLines: 2,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _ratingCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration('Puntuación (0.0 - 5.0)'),
-                  keyboardType: TextInputType.number,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Requerido';
-                    final n = double.tryParse(v);
-                    if (n == null || n < 0 || n > 5) return 'Valor entre 0 y 5';
-                    return null;
-                  },
                 ),
               ],
             ),
@@ -479,20 +375,11 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
       final name = _nameCtrl.text.trim();
       final phone = _phoneCtrl.text.replaceAll(RegExp(r'\D'), '').trim();
       final specialty = _specialtyCtrl.text.trim();
-      final rating = double.parse(_ratingCtrl.text.trim());
-
-      String imageUrl = _imageUrlCtrl.text.trim();
-      if (_selectedImageBytes != null) {
-        imageUrl = await provider.uploadBarberImage(
-          _selectedImageBytes!,
-          _selectedImageName ?? 'barber.jpg',
-        );
-      }
 
       if (isEditing) {
-        await provider.updateBarber(widget.barber!.id, name, phone, imageUrl, specialty, rating);
+        await provider.updateBarber(widget.barber!.id, name, phone, specialty);
       } else {
-        await provider.addBarber(name, phone, imageUrl, specialty, rating);
+        await provider.addBarber(name, phone, specialty);
       }
 
       if (mounted) {
