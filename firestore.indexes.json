@@ -31,8 +31,8 @@
       "collectionGroup": "turnos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" },
-        { "fieldPath": "barberId", "order": "ASCENDING" }
+        { "fieldPath": "barberId", "order": "ASCENDING" },
+        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" }
       ]
     }
   ],
