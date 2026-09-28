@@ -79,18 +79,37 @@ class _BookingFormState extends State<BookingForm> {
   void didUpdateWidget(covariant BookingForm oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.services != oldWidget.services) {
+      // Cada emisión del stream de Firestore crea instancias nuevas de Service
+      // (Service no define ==, compara por identidad). Si se conservara la
+      // instancia anterior el Dropdown apuntaría a un objeto que ya no está en
+      // la lista y se dispararía el assert de dropdown.dart; además arrastraría
+      // el nombre y el precio previos a la edición. Por eso la selección se
+      // re-resuelve siempre por `id`.
       _dynamicServices = widget.services;
-      if (_selectedService == null || !_dynamicServices.any((s) => s.id == _selectedService?.id)) {
-        if (_dynamicServices.isNotEmpty) {
-          _selectedService = _dynamicServices.first;
-        }
+      if (widget.services.isEmpty) {
+        _selectedService = null;
+      } else {
+        final currentId = _selectedService?.id;
+        final matches = currentId == null
+            ? <Service>[]
+            : widget.services.where((Service s) => s.id == currentId).toList();
+        _selectedService = matches.isNotEmpty ? matches.first : widget.services.first;
       }
     }
     if (widget.barbers != oldWidget.barbers) {
-      if (_selectedBarber == null || !widget.barbers.any((b) => b.id == _selectedBarber?.id)) {
-        if (widget.barbers.isNotEmpty) {
-          _selectedBarber = widget.barbers.first;
-        }
+      // Cada emisión del stream de Firestore crea instancias nuevas de Barber
+      // (Barber no define ==, compara por identidad). Si se conservara la
+      // instancia anterior el Dropdown quedaría apuntando a un objeto que ya no
+      // está en la lista y se dispararía el assert de dropdown.dart.
+      // Por eso la selección se re-resuelve siempre por `id`.
+      if (widget.barbers.isEmpty) {
+        _selectedBarber = null;
+      } else {
+        final currentId = _selectedBarber?.id;
+        final matches = currentId == null
+            ? <Barber>[]
+            : widget.barbers.where((b) => b.id == currentId).toList();
+        _selectedBarber = matches.isNotEmpty ? matches.first : widget.barbers.first;
       }
     }
   }
@@ -102,17 +121,25 @@ class _BookingFormState extends State<BookingForm> {
     super.dispose();
   }
 
+  /// Genera los horarios de atención del día desde `config/negocio`.
+  ///
+  /// Los horarios vienen de Firestore: ya no hay lista fija en el código. Si la
+  /// configuración no se pudo leer devuelve una lista vacía y el estado de
+  /// error se muestra aparte, de modo que nunca se interprete como "no hay
+  /// horarios" ni como "todos están libres".
   List<TimeSlot> _getTimeSlotsForDate(DateTime date) {
-    final List<String> hours = [
-      '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-      '12:00', '12:30', '13:00', '13:30', '16:00', '16:30',
-      '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
-    ];
+    final schedule = context.read<BookingProvider>().schedule;
+    if (schedule == null) return const [];
 
     final now = DateTime.now();
     final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
 
-    final availableHours = hours.where((start) {
+    // El paso de generación y la duración mostrada salen de `slotMinutos`
+    // (30 en la configuración actual). No se usa `servicio.duracion`.
+    final step = schedule.slotMinutos;
+    final availableHours = schedule
+        .getSlotsForWeekday(date.weekday)
+        .where((start) {
       if (!isToday) return true;
       final parts = start.split(':');
       final hr = int.parse(parts[0]);
@@ -124,7 +151,7 @@ class _BookingFormState extends State<BookingForm> {
     return availableHours.map((start) {
       final parts = start.split(':');
       int hr = int.parse(parts[0]);
-      int min = int.parse(parts[1]) + 30;
+      int min = int.parse(parts[1]) + step;
       if (min >= 60) {
         hr += 1;
         min -= 60;
@@ -153,6 +180,10 @@ class _BookingFormState extends State<BookingForm> {
   void _loadBookedTimesForCurrentSelection() {
     if (_selectedBarber == null) return;
     final formattedDate = "${_selectedDate.day} de ${_monthsFull[_selectedDate.month - 1]} de ${_selectedDate.year}";
+    // La selección de horario nunca sobrevive a un cambio de barbero/fecha ni a
+    // un reintento: un slot elegido con una disponibilidad distinta debe quedar
+    // sin seleccionar para que no se pueda confirmar un turno no verificado.
+    _selectedTimeSlot = null;
     context.read<BookingProvider>().loadBookedTimes(formattedDate, _selectedBarber!.id);
   }
 
@@ -553,9 +584,93 @@ class _BookingFormState extends State<BookingForm> {
     );
   }
 
+  /// Estado informativo de la disponibilidad: reemplaza la lista de horarios
+  /// cuando todavía no se puede afirmar qué horarios están libres.
+  Widget _buildAvailabilityMessage({
+    required IconData icon,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      height: 300,
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white38, size: 32),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: onAction,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFD4AF37),
+                side: const BorderSide(color: Color(0xFFD4AF37)),
+              ),
+              child: Text(actionLabel),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildTimeSlotList() {
     final bookingProvider = context.watch<BookingProvider>();
     final slots = _getTimeSlotsForDate(_selectedDate);
+
+    // Sin `config/negocio` no se sabe qué horarios existen, así que no se
+    // calcula la lista todavía: primero se resuelve el estado de la
+    // configuración. No hay lista hardcodeada de respaldo, para que un fallo de
+    // Firestore no termine mostrando todos los horarios como disponibles.
+    if (bookingProvider.scheduleError) {
+      return _buildAvailabilityMessage(
+        icon: Icons.cloud_off,
+        message:
+            'No se pudieron cargar los horarios de atención.\nRevisá tu conexión e intentá de nuevo.',
+        actionLabel: 'Reintentar',
+        onAction: bookingProvider.retrySchedule,
+      );
+    }
+
+    if (!bookingProvider.scheduleLoaded) {
+      return _buildAvailabilityMessage(
+        icon: Icons.hourglass_empty,
+        message: 'Cargando horarios...',
+      );
+    }
+
+    // No se ofrece ningún horario hasta tener una respuesta verificable:
+    // "en vuelo" y "falló" no significan "disponible". Se mantiene el mismo
+    // contenedor visual, solo cambia el contenido, y nunca hay pantalla roja.
+    if (bookingProvider.availabilityError) {
+      return _buildAvailabilityMessage(
+        icon: Icons.cloud_off,
+        message:
+            'No se pudo verificar la disponibilidad.\nRevisá tu conexión e intentá de nuevo.',
+        actionLabel: 'Reintentar',
+        onAction: _loadBookedTimesForCurrentSelection,
+      );
+    }
+
+    if (!bookingProvider.availabilityLoaded) {
+      return _buildAvailabilityMessage(
+        icon: Icons.hourglass_empty,
+        message: 'Verificando disponibilidad...',
+      );
+    }
 
     return Container(
       height: 300,
@@ -707,40 +822,59 @@ class _BookingFormState extends State<BookingForm> {
   }
 
   Widget _buildServiceDropdown() {
-    return DropdownButtonFormField<Service>(
-      value: _selectedService,
+    // Se identifica al servicio por su `id` de documento en lugar de por la
+    // identidad de instancia del objeto Service, que cambia en cada emisión del
+    // stream de Firestore. Con `value` por instancia, el assert de
+    // dropdown.dart:1830 ("There should be exactly one item with value") se
+    // dispara al volver del panel de administración, porque el guard de
+    // didUpdateWidget conservaba la instancia anterior.
+    return DropdownButtonFormField<String>(
+      value: _selectedService?.id,
       dropdownColor: const Color(0xFF1E1E1E),
       style: const TextStyle(color: Colors.white),
       decoration: _inputDecoration('Selecciona Servicio', Icons.content_cut),
       items: _dynamicServices.map((Service service) {
-        return DropdownMenuItem<Service>(
-          value: service,
+        return DropdownMenuItem<String>(
+          value: service.id,
           child: Text('${service.name} (\$${service.price.toStringAsFixed(0)})'),
         );
       }).toList(),
-      onChanged: (Service? value) {
+      onChanged: (String? value) {
+        if (value == null) return;
+        final Service? selected = _dynamicServices
+            .where((Service service) => service.id == value)
+            .firstOrNull;
+        if (selected == null) return;
         setState(() {
-          _selectedService = value;
+          _selectedService = selected;
         });
       },
     );
   }
 
   Widget _buildBarberDropdown() {
-    return DropdownButtonFormField<Barber>(
-      value: _selectedBarber,
+    // Se identifica al barbero por su `id` de documento (B1, B2, ...) en lugar
+    // de por la identidad de instancia del objeto Barber, que cambia en cada
+    // emisión del stream de Firestore.
+    return DropdownButtonFormField<String>(
+      value: _selectedBarber?.id,
       dropdownColor: const Color(0xFF1E1E1E),
       style: const TextStyle(color: Colors.white),
       decoration: _inputDecoration('Selecciona Barbero', Icons.person_outline),
       items: widget.barbers.map((Barber barber) {
-        return DropdownMenuItem<Barber>(
-          value: barber,
+        return DropdownMenuItem<String>(
+          value: barber.id,
           child: Text(barber.name),
         );
       }).toList(),
-      onChanged: (Barber? value) {
+      onChanged: (String? value) {
+        if (value == null) return;
+        final Barber? selected = widget.barbers
+            .where((Barber barber) => barber.id == value)
+            .firstOrNull;
+        if (selected == null) return;
         setState(() {
-          _selectedBarber = value;
+          _selectedBarber = selected;
         });
         _loadBookedTimesForCurrentSelection();
       },

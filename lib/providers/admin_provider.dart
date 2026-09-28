@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/appointment_status.dart';
+import '../models/business_schedule.dart';
 import '../services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -53,6 +54,13 @@ class AdminProvider extends ChangeNotifier {
 
   Stream<QuerySnapshot> getBarbersStream() {
   return _firestoreService.getBarbersStream();
+}
+
+  /// Horarios de atención globales (`config/negocio`). La agenda admin usa la
+  /// misma configuración que la reserva pública: una sola fuente de verdad para
+  /// la grilla de horarios.
+  Stream<BusinessSchedule> getBusinessScheduleStream() {
+    return _firestoreService.getBusinessScheduleStream();
 }
 
   Future<void> updateAppointmentStatus(

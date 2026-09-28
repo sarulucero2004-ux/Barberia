@@ -16,7 +16,8 @@ class BookingService {
   })  : _firestoreService = firestoreService,
         _whatsAppService = whatsAppService;
 
-  Stream<List<Appointment>> getAppointmentsByDateAndBarber(String date, String barberId) {
+  /// Horas de inicio ya reservadas (no String de 'HH:MM - HH:MM').
+  Stream<List<String>> getAppointmentsByDateAndBarber(String date, String barberId) {
     return _firestoreService.getAppointmentsByDateAndBarber(date, barberId);
   }
 

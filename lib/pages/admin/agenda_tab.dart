@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/appointment.dart';
+import '../../models/barber.dart';
+import '../../models/business_schedule.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/appointment_status.dart';
 
@@ -28,17 +30,19 @@ class _AgendaTabState extends State<AgendaTab> {
   String get _formattedDate =>
       '${_selectedDate.day} de ${_monthsFull[_selectedDate.month - 1]} de ${_selectedDate.year}';
 
-  List<TimeSlotInfo> _generateTimeSlots() {
-    final List<String> hours = [
-      '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-      '12:00', '12:30', '13:00', '13:30', '16:00', '16:30',
-      '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
-    ];
+  /// Genera la grilla de horarios del día desde `config/negocio`.
+  ///
+  /// La Agenda consume la MISMA configuración global que la reserva pública
+  /// (horarios globales para B1 y B2), pero conserva su propio `TimeSlotInfo` y
+  /// su lectura de `turnos`: no cambia la lógica de ocupación ni los filtros por
+  /// `barberId`.
+  List<TimeSlotInfo> _generateTimeSlots(BusinessSchedule schedule) {
+    final step = schedule.slotMinutos;
 
-    return hours.map((start) {
+    return schedule.getSlotsForWeekday(_selectedDate.weekday).map((start) {
       final parts = start.split(':');
       int hr = int.parse(parts[0]);
-      int min = int.parse(parts[1]) + 30;
+      int min = int.parse(parts[1]) + step;
       if (min >= 60) {
         hr += 1;
         min -= 60;
@@ -60,10 +64,22 @@ class _AgendaTabState extends State<AgendaTab> {
     });
   }
 
+  /// Convierte el snapshot de `barberos` en modelos, tolerando errores, datos
+  /// nulos y documentos incompletos para no romper la Agenda.
+  List<Barber> _parseBarbers(AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (snapshot.hasError) return const [];
+    final data = snapshot.data;
+    if (data == null) return const [];
+    return data.docs
+        .where((doc) => doc.data() != null)
+        .map((doc) => Barber.fromMap(
+            Map<String, dynamic>.from(doc.data()! as Map), doc.id))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
-    final slots = _generateTimeSlots();
 
     return Padding(
       padding: const EdgeInsets.all(32),
@@ -73,10 +89,18 @@ class _AgendaTabState extends State<AgendaTab> {
           _buildDateNavigator(),
           const SizedBox(height: 24),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: adminProvider.getAppointmentsStream(date: _formattedDate),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+            child: StreamBuilder<BusinessSchedule>(
+              stream: adminProvider.getBusinessScheduleStream(),
+              builder: (context, scheduleSnapshot) {
+                // La grilla depende de `config/negocio`. Si la configuración no
+                // se pudo leer no se dibujan horarios: una grilla vacía o con
+                // horarios supuestos sería información falsa.
+                if (scheduleSnapshot.hasError) {
+                  return const Center(
+                    child: Text('No se pudieron cargar los horarios de atención.'),
+                  );
+                }
+                if (scheduleSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4AF37)),
@@ -84,18 +108,46 @@ class _AgendaTabState extends State<AgendaTab> {
                   );
                 }
 
-                final appointments = <Appointment>[];
-                if (snapshot.hasData) {
-                  for (final doc in snapshot.data!.docs) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    if (data['date'] == _formattedDate &&
-                        data['status'] != AppointmentStatus.cancelled.toJson()) {
-                      appointments.add(Appointment.fromMap(data, doc.id));
-                    }
-                  }
+                final schedule = scheduleSnapshot.data;
+                if (schedule == null) {
+                  return const Center(
+                    child: Text('No se pudieron cargar los horarios de atención.'),
+                  );
                 }
 
-                return _buildAgendaGrid(slots, appointments);
+                final slots = _generateTimeSlots(schedule);
+
+                return StreamBuilder<QuerySnapshot>(
+              stream: adminProvider.getBarbersStream(),
+              builder: (context, barberSnapshot) {
+                final barbers = _parseBarbers(barberSnapshot);
+                return StreamBuilder<QuerySnapshot>(
+                  stream: adminProvider.getAppointmentsStream(date: _formattedDate),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4AF37)),
+                        ),
+                      );
+                    }
+
+                    final appointments = <Appointment>[];
+                    if (snapshot.hasData) {
+                      for (final doc in snapshot.data!.docs) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        if (data['date'] == _formattedDate &&
+                            data['status'] != AppointmentStatus.cancelled.toJson()) {
+                          appointments.add(Appointment.fromMap(data, doc.id));
+                        }
+                      }
+                    }
+
+                    return _buildAgendaGrid(slots, appointments, barbers);
+                  },
+                );
+              },
+            );
               },
             ),
           ),
@@ -153,7 +205,16 @@ class _AgendaTabState extends State<AgendaTab> {
     );
   }
 
-  Widget _buildAgendaGrid(List<TimeSlotInfo> slots, List<Appointment> appointments) {
+  Widget _buildAgendaGrid(List<TimeSlotInfo> slots, List<Appointment> appointments,
+      List<Barber> barbers) {
+    if (barbers.isEmpty) {
+      return const Center(
+        child: Text(
+          'No hay barberos cargados.',
+          style: TextStyle(color: Colors.white38),
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final crossAxisCount = constraints.maxWidth > 900 ? 3 : (constraints.maxWidth > 600 ? 2 : 1);
@@ -164,21 +225,30 @@ class _AgendaTabState extends State<AgendaTab> {
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          itemCount: slots.length,
+          // Una celda por combinación (horario, barbero). La disponibilidad se
+          // calcula por barbero, así que un turno de Ezequiel no puede marcar el
+          // mismo horario como ocupado para Isaías.
+          itemCount: slots.length * barbers.length,
           itemBuilder: (context, index) {
-            final slot = slots[index];
-            final appointment = appointments.where((a) {
-              return a.time.startsWith(slot.startTime);
-            }).firstOrNull;
+            final slot = slots[index ~/ barbers.length];
+            final barber = barbers[index % barbers.length];
+            // La coincidencia usa barberId + hora de inicio. Antes solocomparaba
+            // la hora, así que un turno de un barbero ocultaba el del otro y el
+            // grid mostraba un único turno por horario.
+            final appointment = appointments
+                .where((a) =>
+                    a.barberId == barber.id &&
+                    a.time.split(' - ').first == slot.startTime)
+                .firstOrNull;
 
-            return _buildSlotCard(slot, appointment);
+            return _buildSlotCard(slot, appointment, barber.name);
           },
         );
       },
     );
   }
 
-  Widget _buildSlotCard(TimeSlotInfo slot, Appointment? appointment) {
+  Widget _buildSlotCard(TimeSlotInfo slot, Appointment? appointment, String barberName) {
     if (appointment == null) {
       return Container(
         decoration: BoxDecoration(
@@ -209,6 +279,11 @@ class _AgendaTabState extends State<AgendaTab> {
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                   ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  barberName,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 2),
                 const Text(

@@ -3,15 +3,26 @@ class Barber {
   final String name;
   final String phone;
   final String specialty;
+  final bool activo;
 
   Barber({
     required this.id,
     required this.name,
     required this.phone,
     required this.specialty,
+    this.activo = true,
   });
 
   String get imageAssetPath {
+    // B1 y B2 son IDs fijos: se resuelven primero por ID para que un cambio de
+    // `nombre` en Firestore no rompa el asset local.
+    switch (id) {
+      case 'B1':
+        return 'assets/images/barberos/ezequiel.jpg';
+      case 'B2':
+        return 'assets/images/barberos/isaias.jpg';
+    }
+
     final cleanName = name
         .trim()
         .toLowerCase()
@@ -38,6 +49,7 @@ class Barber {
       'nombre': name,
       'telefono': phone,
       'especialidad': specialty,
+      'activo': activo,
     };
   }
 
@@ -47,6 +59,7 @@ class Barber {
       name: map['nombre'] ?? '',
       phone: map['telefono'] ?? '',
       specialty: map['especialidad'] ?? '',
+      activo: map['activo'] is bool ? map['activo'] as bool : true,
     );
   }
 }

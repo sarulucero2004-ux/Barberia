@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../models/appointment.dart';
 import '../models/appointment_status.dart';
 import '../models/barber.dart';
+import '../models/business_schedule.dart';
 import '../models/service.dart';
 
 class FirestoreService {
@@ -43,40 +44,10 @@ class FirestoreService {
 
   // ── Barbers (public) ──────────────────────────────────────────────────────
 
-  Future<void> seedInitialBarbersIfEmpty() async {
-    try {
-      final snapshot = await _db.collection('barberos').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        final initialBarbers = [
-          {
-            'nombre': 'Ezequiel',
-            'telefono': '5491141948792',
-            'especialidad': 'Cortes clásicos, degradados & afeitados tradicionales',
-          },
-          {
-            'nombre': 'Isaías',
-            'telefono': '5491134855509',
-            'especialidad': 'Diseño de barba, perfilados & peinados vintage',
-          },
-        ];
-
-        final batch = _db.batch();
-        for (var barber in initialBarbers) {
-          final docRef = _db.collection('barberos').doc();
-          batch.set(docRef, barber);
-        }
-        await batch.commit();
-      }
-    } catch (e) {
-      // Si falla por permisos o desconexión, continuar sin interrumpir
-      // ignore: avoid_print
-      print('Aviso al autopoblar barberos: $e');
-    }
-  }
-
+  /// Lee los barberos desde Firestore. No crea ni modifica documentos:
+  /// la colección `barberos` es la única fuente de verdad.
   Future<List<Barber>> getBarbers() async {
     try {
-      await seedInitialBarbersIfEmpty();
       final snapshot = await _db.collection('barberos').get();
       return snapshot.docs.map((doc) {
         return Barber.fromMap(doc.data(), doc.id);
@@ -90,17 +61,63 @@ class FirestoreService {
 
   // ── Appointments (public) ─────────────────────────────────────────────────
 
+  /// Horarios de atención del negocio, en `config/negocio`.
+  ///
+  /// Es una lectura ADITIVA e independiente de la disponibilidad: la
+  /// configuración responde "¿qué horarios existen?" y `disponibilidad`
+  /// responde "¿cuáles están ocupados?". No interviene en la transacción de
+  /// `saveAppointment()` ni en la construcción del `slotId`.
+  DocumentReference<Map<String, dynamic>> get _configNegocio =>
+      _db.collection('config').doc('negocio');
+
+  /// Emite la configuración de horarios en tiempo real, sin necesidad de
+  /// recargar la página. Si el documento no existe o es inválido se lanza un
+  /// error: nunca se devuelve una agenda vacía como si fuera válida, para que
+  /// el provider pueda mostrar un estado de error en vez de ofrecer todos los
+  /// horarios.
+  Stream<BusinessSchedule> getBusinessScheduleStream() {
+    return _configNegocio.snapshots().map((snapshot) {
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        throw StateError(
+            'No existe el documento config/negocio con los horarios de atención.');
+      }
+      return BusinessSchedule.fromMap(data);
+    });
+  }
+
+  /// Colección pública de disponibilidad. Contiene únicamente barbero, fecha,
+  /// hora de inicio y estado: ningún dato del cliente. Permite que la agenda
+  /// pública consulte los horarios ocupados sin abrir `turnos`, que es privada.
+  CollectionReference<Map<String, dynamic>> get _disponibilidad =>
+      _db.collection('disponibilidad');
+
+  /// ID determinista del slot. Debe generarse exactamente igual que el que usa
+  /// `turnos` para que ambos documentos se correspondan por el mismo id.
+  String _buildSlotId({
+    required String barberId,
+    required String date,
+    required String startTime,
+  }) {
+    return '${barberId}_${date}_$startTime'
+        .replaceAll(' ', '_')
+        .replaceAll('/', '_');
+  }
+
   Future<void> saveAppointment(Appointment appointment) async {
     try {
       final startTime = appointment.time.split(' - ').first;
       final parsedDate = appointment.getParsedDateTime() ?? DateTime.now();
 
       // Generar un ID único determinista basado en el barbero, la fecha y la hora del turno
-      final slotId = '${appointment.barberId}_${appointment.date}_$startTime'
-          .replaceAll(' ', '_')
-          .replaceAll('/', '_');
+      final slotId = _buildSlotId(
+        barberId: appointment.barberId,
+        date: appointment.date,
+        startTime: startTime,
+      );
 
       final docRef = _db.collection('turnos').doc(slotId);
+      final disponibilidadRef = _disponibilidad.doc(slotId);
 
       await _db.runTransaction((transaction) async {
         // Realizar la lectura previa (get) por referencia de documento en la transacción
@@ -119,6 +136,17 @@ class FirestoreService {
           ...appointment.toMap(),
           'appointmentDateTime': Timestamp.fromDate(parsedDate),
           'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        // Espejo público de disponibilidad, escrito en la MISMA transacción que
+        // protege contra la doble reserva. Al ser atómica, no puede quedar un
+        // turno sin su disponibilidad ni una disponibilidad sin su turno.
+        // No se copian datos del cliente: solo barbero, fecha, hora y estado.
+        transaction.set(disponibilidadRef, {
+          'barberId': appointment.barberId,
+          'date': appointment.date,
+          'startTime': startTime,
+          'status': appointment.status.toJson(),
         });
       });
     } on FirebaseException catch (e) {
@@ -148,15 +176,23 @@ class FirestoreService {
         .snapshots();
   }
 
-  Stream<List<Appointment>> getAppointmentsByDateAndBarber(
+  /// Horas de inicio ya reservadas para un barbero en una fecha concreta.
+  ///
+  /// Se lee de `disponibilidad` (colección pública sin datos personales) en
+  /// lugar de `turnos`, que exige autenticación y provocaba
+  /// `permission-denied` en la agenda pública. Solo `cancelled` libera el
+  /// horario: el resto de los estados (`pending`, `confirmed`, `completed`)
+  /// siguen bloqueándolo.
+  Stream<List<String>> getAppointmentsByDateAndBarber(
       String date, String barberId) {
-    return _db
-        .collection('turnos')
+    return _disponibilidad
         .where('date', isEqualTo: date)
         .where('barberId', isEqualTo: barberId)
+        .where('status', isNotEqualTo: AppointmentStatus.cancelled.toJson())
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => Appointment.fromMap(doc.data(), doc.id))
+            .map((doc) => (doc.data()['startTime'] ?? '') as String)
+            .where((startTime) => startTime.isNotEmpty)
             .toList());
   }
 
@@ -246,6 +282,15 @@ class FirestoreService {
       await _db.collection('turnos').doc(appointmentId).update({
         'status': newStatus.toJson(),
       });
+      // Espejo de disponibilidad: al marcar el turno como `cancelled` deja de
+      // bloquear el horario. Se propaga el estado en vez de borrar el documento
+      // para que reactivar un turno cancelado vuelva a bloquearlo. `set` con
+      // merge evita fallar si el documento todavía no existe (turnos creados
+      // antes de que existiera la colección `disponibilidad`).
+      await _disponibilidad.doc(appointmentId).set(
+        {'status': newStatus.toJson()},
+        SetOptions(merge: true),
+      );
     } on FirebaseException catch (e) {
       throw Exception('Error al actualizar el estado: ${e.message}');
     } catch (e) {
@@ -256,6 +301,10 @@ class FirestoreService {
   Future<void> deleteAppointment(String appointmentId) async {
     try {
       await _db.collection('turnos').doc(appointmentId).delete();
+      // `appointmentId` es el slotId, el mismo id usado en `disponibilidad`.
+      // `delete` sobre un documento inexistente no lanza, por lo que los
+      // turnos anteriores a esta colección no rompen el borrado.
+      await _disponibilidad.doc(appointmentId).delete();
     } on FirebaseException catch (e) {
       throw Exception('Error al eliminar el turno: ${e.message}');
     } catch (e) {
@@ -267,11 +316,54 @@ class FirestoreService {
       String appointmentId, Map<String, dynamic> data) async {
     try {
       await _db.collection('turnos').doc(appointmentId).update(data);
+      await _syncAvailabilityAfterEdit(appointmentId, data);
     } on FirebaseException catch (e) {
       throw Exception('Error al actualizar el turno: ${e.message}');
     } catch (e) {
       throw Exception('Error inesperado al actualizar el turno.');
     }
+  }
+
+  /// Mantiene alineado el espejo de disponibilidad tras editar un turno.
+  ///
+  /// `appointmentId` es el slotId original (ver `saveAppointment`), así que el
+  /// documento viejo de disponibilidad se identifica con ese mismo id. Si la
+  /// edición cambia barbero, fecha u hora, el slot es otro: se libera el
+  /// anterior y se publica el nuevo, para no dejar bloqueando un horario que
+  /// ya no tiene turno asociado.
+  Future<void> _syncAvailabilityAfterEdit(
+      String appointmentId, Map<String, dynamic> data) async {
+    final newStatus = data['status']?.toString();
+    if (newStatus != null) {
+      await _disponibilidad.doc(appointmentId)
+          .set({'status': newStatus}, SetOptions(merge: true));
+    }
+
+    const slotKeys = ['barberId', 'date', 'time', 'startTime'];
+    if (!slotKeys.any(data.containsKey)) return;
+
+    // Se relee el turno porque `update` ya aplicó los cambios: de ahí salen
+    // los valores definitivos del nuevo slot.
+    final snapshot = await _db.collection('turnos').doc(appointmentId).get();
+    if (!snapshot.exists) return;
+    final current = snapshot.data()!;
+
+    final barberId = '${current['barberId'] ?? ''}';
+    final date = '${current['date'] ?? ''}';
+    final startTime = '${current['startTime'] ?? '${current['time'] ?? ''}'.split(' - ').first}';
+
+    final newSlotId =
+        _buildSlotId(barberId: barberId, date: date, startTime: startTime);
+
+    if (newSlotId != appointmentId) {
+      await _disponibilidad.doc(appointmentId).delete();
+    }
+    await _disponibilidad.doc(newSlotId).set({
+      'barberId': barberId,
+      'date': date,
+      'startTime': startTime,
+      'status': '${current['status'] ?? AppointmentStatus.pending.toJson()}',
+    }, SetOptions(merge: true));
   }
 
   Future<bool> checkExistingBookingExcluding(
@@ -300,6 +392,12 @@ class FirestoreService {
 
   Stream<QuerySnapshot> getServicesStream() {
     return _db.collection('servicios').snapshots();
+  }
+
+  Stream<List<Service>> getServicesListStream() {
+    return _db.collection('servicios').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Service.fromMap(doc.data(), doc.id)).toList();
+    });
   }
 
   Future<void> addService(Map<String, dynamic> data) async {
@@ -340,7 +438,6 @@ class FirestoreService {
   }
 
   Stream<List<Barber>> getBarbersListStream() {
-    seedInitialBarbersIfEmpty();
     return _db.collection('barberos').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Barber.fromMap(doc.data(), doc.id)).toList();
     });
@@ -364,9 +461,33 @@ class FirestoreService {
     }
   }
 
-  Future<void> addBarber(Map<String, dynamic> data) async {
+  /// Calcula el siguiente ID controlado para un barbero nuevo (B3, B4, ...).
+  /// Nunca genera B1 ni B2: esos IDs están reservados y solo se crean a mano
+  /// desde la consola de Firestore.
+  Future<String> _nextBarberDocId() async {
+    final snapshot = await _db.collection('barberos').get();
+    var maxIndex = 1; // >= 1 para que el primer ID generado sea B3
+    for (final doc in snapshot.docs) {
+      final match = RegExp(r'^B(\d+)$').firstMatch(doc.id);
+      if (match == null) continue;
+      final index = int.tryParse(match.group(1)!);
+      if (index != null && index > maxIndex) {
+        maxIndex = index;
+      }
+    }
+    return 'B${maxIndex + 1}';
+  }
+
+  /// Crea un barbero con un ID controlado (B3, B4, ...). Nunca usa `.add()`,
+  /// para que el `docId` sea siempre determinista y comparable con `barberId`.
+  Future<String> addBarber(Map<String, dynamic> data) async {
     try {
-      await _db.collection('barberos').add(data);
+      final docId = await _nextBarberDocId();
+      await _db.collection('barberos').doc(docId).set({
+        ...data,
+        'activo': data['activo'] ?? true,
+      });
+      return docId;
     } on FirebaseException catch (e) {
       throw Exception('Error al agregar barbero: ${e.message}');
     } catch (e) {
@@ -374,6 +495,9 @@ class FirestoreService {
     }
   }
 
+  /// Actualiza SOLO el documento recibido. No crea documentos nuevos y no
+  /// toca `activo` (u otros campos) porque `.update()` solo escribe las claves
+  /// incluidas en `data`.
   Future<void> updateBarber(String barberId, Map<String, dynamic> data) async {
     try {
       await _db.collection('barberos').doc(barberId).update(data);
@@ -384,6 +508,7 @@ class FirestoreService {
     }
   }
 
+  /// Elimina SOLO el documento cuyo ID coincide con `barberId`.
   Future<void> deleteBarber(String barberId) async {
     try {
       await _db.collection('barberos').doc(barberId).delete();

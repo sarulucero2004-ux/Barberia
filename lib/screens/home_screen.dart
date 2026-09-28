@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/service.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/about_us_section.dart';
 import '../widgets/booking_form.dart';
@@ -20,37 +19,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
-
-  static final List<Service> _defaultServices = [
-    Service(
-      id: 's1',
-      name: 'Corte de cabello',
-      description: 'Corte personalizado con lavado, masaje capilar y peinado con cera premium.',
-      price: 9000,
-      durationMinutes: 30,
-    ),
-    Service(
-      id: 's2',
-      name: 'corte de barba',
-      description: 'Afeitado tradicional a navaja con toallas calientes y bálsamo hidratante.',
-      price: 2000,
-      durationMinutes: 20,
-    ),
-    Service(
-      id: 's3',
-      name: 'Perfilado de cejas',
-      description: 'Esculpido, rebaje y alineación de contornos con navaja e hidratación.',
-      price: 1500,
-      durationMinutes: 10,
-    ),
-    Service(
-      id: 's4',
-      name: 'Global',
-      description: 'El servicio definitivo: Corte premium + Perfilado de barba con toallas calientes.',
-      price: 30000,
-      durationMinutes: 60,
-    ),
-  ];
 
   final double _heroHeight = 650.0;
   final double _aboutUsHeight = 850.0;
@@ -85,9 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final bookingProvider = context.watch<BookingProvider>();
     final barbers = bookingProvider.barbers;
-    final services = bookingProvider.services.isNotEmpty
-        ? bookingProvider.services
-        : _defaultServices;
+    final services = bookingProvider.services;
 
     return Scaffold(
       appBar: CustomAppBar(

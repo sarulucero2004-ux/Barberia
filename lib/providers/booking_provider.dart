@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, User;
 import '../models/appointment.dart';
 import '../models/barber.dart';
+import '../models/business_schedule.dart';
 import '../models/service.dart';
 import '../services/booking_service.dart';
 import '../services/firestore_service.dart';
@@ -17,9 +18,29 @@ class BookingProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSaving = false;
 
-  StreamSubscription<List<Appointment>>? _appointmentsSubscription;
+  StreamSubscription<List<String>>? _appointmentsSubscription;
   StreamSubscription<List<Barber>>? _barbersSubscription;
+  StreamSubscription<List<Service>>? _servicesSubscription;
   final Set<String> _bookedTimes = {};
+
+  /// Estado de verificación de la disponibilidad del slot seleccionado.
+  ///
+  /// La agenda pública NO puede asumir que un horario está libre solo porque la
+  /// consulta falló: `availabilityError` significa "no se pudo verificar", que
+  /// es un estado distinto de "disponible" y por eso bloquea la selección.
+  bool _availabilityError = false;
+  bool _availabilityLoaded = false;
+
+  /// Configuración de horarios de atención (`config/negocio`).
+  ///
+  /// `null` significa "no hay configuración válida disponible", que es un estado
+  /// de ERROR y no una agenda vacía. No existe lista horaria hardcodeada de
+  /// respaldo: si Firestore falla, la UI debe avisar y pedir reintentar en
+  /// lugar de ofrecer todos los horarios como libres.
+  BusinessSchedule? _schedule;
+  StreamSubscription<BusinessSchedule>? _scheduleSubscription;
+  bool _scheduleError = false;
+  bool _scheduleLoaded = false;
 
   Barber? _pendingBarber;
   Service? _pendingService;
@@ -36,6 +57,28 @@ class BookingProvider extends ChangeNotifier {
   bool get isSaving => _isSaving;
   Set<String> get bookedTimes => _bookedTimes;
 
+  /// `true` cuando la consulta de disponibilidad falló: no se pudo verificar
+  /// qué horarios están ocupados. La UI debe mostrar un error, nunca pintar
+  /// todos los horarios como disponibles.
+  bool get availabilityError => _availabilityError;
+
+  /// `true` cuando hay una respuesta definitiva (correcta o con error). Mientras
+  /// es `false` la disponibilidad está en vuelo y no se puede afirmar que un
+  /// horario esté libre.
+  bool get availabilityLoaded => _availabilityLoaded;
+
+  /// Horarios de atención configurados en Firestore, o `null` si todavía no
+  /// se pudieron leer.
+  BusinessSchedule? get schedule => _schedule;
+
+  /// `true` cuando la lectura de `config/negocio` falló. En ese estado NO se
+  /// generan horarios: mostrarlos equivaldría a afirmar disponibilidad sin
+  /// haber verificado la configuración.
+  bool get scheduleError => _scheduleError;
+
+  /// `true` cuando la configuración ya dio una respuesta definitiva.
+  bool get scheduleLoaded => _scheduleLoaded;
+
   Barber? get pendingBarber => _pendingBarber;
   Service? get pendingService => _pendingService;
   String? get pendingDate => _pendingDate;
@@ -49,6 +92,43 @@ class BookingProvider extends ChangeNotifier {
         _firestoreService = firestoreService {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(_onAuthStateChanged);
     _listenToBarbers();
+    _listenToServices();
+    _listenToSchedule();
+  }
+
+  /// Escucha `config/negocio` en tiempo real para que los horarios se actualicen
+  /// sin recargar la página.
+  void _listenToSchedule() {
+    _scheduleSubscription =
+        _firestoreService.getBusinessScheduleStream().listen(
+      (schedule) {
+        _schedule = schedule;
+        _scheduleError = false;
+        _scheduleLoaded = true;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        // Se descarta la configuración en lugar de mantener una agenda vieja: sin
+        // `config/negocio` no se puede afirmar qué horarios existen. La UI
+        // muestra error y permite reintentar.
+        debugPrint('Error al escuchar config/negocio desde Firestore: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        _schedule = null;
+        _scheduleError = true;
+        _scheduleLoaded = true;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Reintenta leer la configuración de horarios tras un error.
+  void retrySchedule() {
+    _scheduleSubscription?.cancel();
+    _scheduleError = false;
+    _scheduleLoaded = false;
+    _schedule = null;
+    notifyListeners();
+    _listenToSchedule();
   }
 
   void _listenToBarbers() {
@@ -56,6 +136,21 @@ class BookingProvider extends ChangeNotifier {
       _barbers = barbers;
       notifyListeners();
     });
+  }
+
+  void _listenToServices() {
+    _servicesSubscription = _firestoreService.getServicesListStream().listen(
+      (services) {
+        _services = services;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        // Sin este onError el fallo del stream se descarta en silencio: la
+        // página principal queda vacía sin ningún indicio de la causa.
+        debugPrint('Error al escuchar servicios desde Firestore: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      },
+    );
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
@@ -115,9 +210,17 @@ class BookingProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      _services = await _firestoreService.getServices();
+      final loaded = await _firestoreService.getServices();
+      // La lista se mantiene actualizada por el stream (_listenToServices).
+      // Esta lectura puntual solo trae el estado inicial, así que no debe
+      // pisar con un resultado vacío una lista que el stream ya entregó.
+      if (loaded.isNotEmpty) {
+        _services = loaded;
+      }
     } catch (_) {
-      _services = [];
+      // Ante cualquier error se conserva lo que el stream ya entregó.
+      // Antes se hacía `_services = []`, lo que vaciaba la página principal
+      // aunque los servicios existieran en Firestore.
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -135,14 +238,37 @@ class BookingProvider extends ChangeNotifier {
 
   void loadBookedTimes(String date, String barberId) {
     _appointmentsSubscription?.cancel();
+    // Se limpia el set anterior porque pertenece a otra fecha/barbero, pero
+    // `_availabilityLoaded = false` impide que la UI lo interprete como
+    // "no hay horarios ocupados": la disponibilidad queda "en vuelo".
+    _bookedTimes.clear();
+    _availabilityError = false;
+    _availabilityLoaded = false;
+    notifyListeners();
     _appointmentsSubscription = _bookingService
         .getAppointmentsByDateAndBarber(date, barberId)
-        .listen((appointments) {
-      _bookedTimes
-        ..clear()
-        ..addAll(appointments.map((a) => a.time.split(' - ').first));
-      notifyListeners();
-    });
+        .listen(
+      (bookedStartTimes) {
+        _bookedTimes
+          ..clear()
+          ..addAll(bookedStartTimes);
+        _availabilityError = false;
+        _availabilityLoaded = true;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        // Un fallo de lectura significa "NO SE PUDO VERIFICAR LA
+        // DISPONIBILIDAD", nunca "todo está disponible". Se marca el error y se
+        // bloquea la selección; `_bookedTimes` NO se vacía para no perder la
+        // ocupación conocida, y no se vuelve a notificar disponibilidad como si
+        // fuera válida. La autoridad para rechazar una doble reserva sigue
+        // siendo la transacción de `turnos`, no esta lista.
+        debugPrint('No se pudo leer la disponibilidad: $error');
+        _availabilityError = true;
+        _availabilityLoaded = true;
+        notifyListeners();
+      },
+    );
   }
 
   Future<void> confirmBooking({
@@ -224,6 +350,8 @@ class BookingProvider extends ChangeNotifier {
   void dispose() {
     _appointmentsSubscription?.cancel();
     _barbersSubscription?.cancel();
+    _servicesSubscription?.cancel();
+    _scheduleSubscription?.cancel();
     _authSubscription?.cancel();
     super.dispose();
   }
