@@ -13,6 +13,11 @@ class AuthProvider extends ChangeNotifier {
   String _rol = 'cliente';
   bool _isLoading = false;
 
+  /// Identificador del barbero (B1 / B2) asociado a este usuario. Es el mismo
+  /// campo `barberId` que ya existe en los documentos de `usuarios`, y se lee
+  /// junto con el resto del perfil para no hacer consultas adicionales.
+  String _barberId = '';
+
   User? get user => _user;
   String get uid => _user?.uid ?? '';
   String get email => _user?.email ?? '';
@@ -20,6 +25,7 @@ class AuthProvider extends ChangeNotifier {
   String get apellido => _apellido;
   String get nombreCompleto => '$_nombre $_apellido';
   String get role => _rol;
+  String get barberId => _barberId;
   bool get isLoggedIn => _user != null;
   bool get isAuthenticated => _user != null;
   bool get isAdmin => _rol == 'admin';
@@ -41,6 +47,7 @@ class AuthProvider extends ChangeNotifier {
       _nombre = '';
       _apellido = '';
       _rol = 'cliente';
+      _barberId = '';
     }
     notifyListeners();
   }
@@ -52,11 +59,13 @@ class AuthProvider extends ChangeNotifier {
         _nombre = data['nombre'] ?? '';
         _apellido = data['apellido'] ?? '';
         _rol = data['rol'] ?? 'cliente';
+        _barberId = data['barberId'] ?? '';
       }
     } catch (_) {
       _nombre = _user?.email?.split('@')[0] ?? '';
       _apellido = '';
       _rol = 'cliente';
+      _barberId = '';
     }
   }
 

@@ -160,21 +160,29 @@ class FirestoreService {
     }
   }
 
-  Stream<QuerySnapshot> getAppointmentsStream({String? date}) {
-    if (date != null) {
-      return _db
-          .collection('turnos')
-          .where('date', isEqualTo: date)
-          .snapshots();
+    Stream<QuerySnapshot> getAppointmentsStream({String? date, String? barberId}) {
+      Query<Map<String, dynamic>> query = _db.collection('turnos');
+
+      if (date != null) {
+        query = query.where('date', isEqualTo: date);
+      } else {
+        // Para la lista general de turnos, filtramos los que tengan fecha de hoy en adelante
+        final now = DateTime.now();
+        final todayStart = DateTime(now.year, now.month, now.day);
+        query = query.where('appointmentDateTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart));
+      }
+
+      // Separación por barbero: cada administrador consulta únicamente su
+      // propio `barberId`. El filtro va en la query, no en la UI, porque las
+      // reglas de Firestore exigen que la consulta acote el campo que la regla
+      // evalúa por documento.
+      if (barberId != null && barberId.isNotEmpty) {
+        query = query.where('barberId', isEqualTo: barberId);
+      }
+
+      return query.snapshots();
     }
-    // Para la lista general de turnos, filtramos los que tengan fecha de hoy en adelante
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    return _db
-        .collection('turnos')
-        .where('appointmentDateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
-        .snapshots();
-  }
 
   /// Horas de inicio ya reservadas para un barbero en una fecha concreta.
   ///

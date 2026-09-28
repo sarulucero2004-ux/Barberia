@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/admin_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/appointment_status.dart';
 import '../../models/appointment.dart';
 
@@ -26,6 +27,8 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
+    // Solo los turnos del barbero de este administrador.
+    final adminBarberId = context.watch<AuthProvider>().barberId;
 
     return Padding(
       padding: const EdgeInsets.all(32),
@@ -35,8 +38,17 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
           _buildSearchAndFilters(),
           const SizedBox(height: 20),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: adminProvider.getAppointmentsStream(),
+            // Sin `barberId` la consulta no se puede acotar y las reglas la
+            // rechazarían; se informa en vez de listar turnos ajenos.
+            child: adminBarberId.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Tu cuenta no tiene un barbero asignado.',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  )
+                : StreamBuilder<QuerySnapshot>(
+              stream: adminProvider.getAppointmentsStream(barberId: adminBarberId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -649,7 +661,7 @@ class _EditAppointmentDialogState extends State<_EditAppointmentDialog> {
     setState(() => _isSaving = true);
 
     try {
-      final adminProvider = context.read<AdminProvider>();
+    final adminProvider = context.read<AdminProvider>();
       final startTime = _timeController.text.trim();
 
       final isBooked = await adminProvider.checkAvailabilityExcluding(

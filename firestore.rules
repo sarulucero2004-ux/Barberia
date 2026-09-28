@@ -1,6 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    // El administrador es el mismo concepto que ya usa el resto de la app:
+    // `usuarios/{uid}.rol == 'admin'`. No se introduce ningún concepto nuevo.
+
+    function esAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    // Barbero asociado al administrador autenticado. Usa el campo `barberId`
+    // que YA existe en los documentos de `usuarios`.
+    function miBarberId() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.barberId;
+    }
+
     // Reglas para barberos (lectura pública, escritura solo administradores)
     match /barberos/{barberId} {
       allow read: if true;
@@ -24,12 +41,34 @@ service cloud.firestore {
 
     // Reglas para turnos (contiene datos personales del cliente: lectura privada)
     match /turnos/{turnoId} {
-      allow read: if request.auth != null;
+      // Un administrador solo lee los turnos de SU barbero. El cliente sigue
+      // leyendo con autenticación, tal como antes.
+      //
+      // `resource == null` cubre la lectura de un slot inexistente que hace la
+      // transacción de reserva: no revela datos y mantiene ese flujo igual.
+      //
+      // Como la regla evalúa `barberId` por documento, cualquier consulta
+      // (`list`) debe acotar ese campo, que es lo que hace
+      // `getAppointmentsStream(barberId: ...)`. Una consulta sin acotar sería
+      // rechazada.
+      allow read: if request.auth != null && (
+        !esAdmin() ||
+        resource == null ||
+        resource.data.barberId == miBarberId()
+      );
+
+      // Los clientes reservan con cualquiera de los dos barberos: sin cambios.
       allow create: if request.auth != null;
+
+      // El dueño del turno puede tocarlo, y el administrador solo los suyos.
+      // La comparación con `request.resource.data.barberId` impide que un
+      // administrador reasigne un turno al barbero del otro: el turno debe ser
+      // suyo ANTES y DESPUÉS de la edición.
       allow update, delete: if request.auth != null && (
         request.auth.uid == resource.data.userId ||
-        (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin')
+        (esAdmin() &&
+         resource.data.barberId == miBarberId() &&
+         request.resource.data.barberId == miBarberId())
       );
     }
 
@@ -41,5 +80,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.auth != null;
     }
+
+    // NOTA: la configuración de horarios (`config/negocio`) NO tiene reglas en
+    // este archivo a propósito. Se despliega por separado, junto con la
+    // creación del documento, para poder aislar los problemas de cada cambio.
+    // Sin un `match /config`, toda lectura de esa colección queda denegada.
   }
 }

@@ -26,6 +26,14 @@
         { "fieldPath": "barberId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "turnos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "appointmentDateTime", "order": "ASCENDING" },
+        { "fieldPath": "barberId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

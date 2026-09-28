@@ -5,6 +5,7 @@ import '../../models/appointment.dart';
 import '../../models/barber.dart';
 import '../../models/business_schedule.dart';
 import '../../providers/admin_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/appointment_status.dart';
 
 class AgendaTab extends StatefulWidget {
@@ -80,6 +81,9 @@ class _AgendaTabState extends State<AgendaTab> {
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
+    // Cada administrador administra únicamente su propio barbero. El `barberId`
+    // sale del documento de `usuarios` (mismo campo que ya usan los turnos).
+    final adminBarberId = context.watch<AuthProvider>().barberId;
 
     return Padding(
       padding: const EdgeInsets.all(32),
@@ -89,7 +93,17 @@ class _AgendaTabState extends State<AgendaTab> {
           _buildDateNavigator(),
           const SizedBox(height: 24),
           Expanded(
-            child: StreamBuilder<BusinessSchedule>(
+            // Sin `barberId` no se puede acotar la consulta, y una consulta sin
+            // acotar sería rechazada por las reglas. Se informa en vez de
+            // mostrar la agenda de otro barbero.
+            child: adminBarberId.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Tu cuenta no tiene un barbero asignado.',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  )
+                : StreamBuilder<BusinessSchedule>(
               stream: adminProvider.getBusinessScheduleStream(),
               builder: (context, scheduleSnapshot) {
                 // La grilla depende de `config/negocio`. Si la configuración no
@@ -120,9 +134,15 @@ class _AgendaTabState extends State<AgendaTab> {
                 return StreamBuilder<QuerySnapshot>(
               stream: adminProvider.getBarbersStream(),
               builder: (context, barberSnapshot) {
-                final barbers = _parseBarbers(barberSnapshot);
+                // Solo la columna del barbero de este administrador. El grid no
+                // cambia de estructura: `itemCount` sigue siendo
+                // `slots * barbers`, ahora con una única columna.
+                final barbers = _parseBarbers(barberSnapshot)
+                    .where((b) => b.id == adminBarberId)
+                    .toList();
                 return StreamBuilder<QuerySnapshot>(
-                  stream: adminProvider.getAppointmentsStream(date: _formattedDate),
+                  stream: adminProvider.getAppointmentsStream(
+                      date: _formattedDate, barberId: adminBarberId),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
