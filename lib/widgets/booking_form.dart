@@ -259,65 +259,94 @@ class _BookingFormState extends State<BookingForm> {
         time: formattedTime,
       );
 
+      bool isNotifying = false;
+
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: Row(
-            children: const [
-              Icon(Icons.check_circle, color: Color(0xFFD4AF37)),
-              SizedBox(width: 12),
-              Text(
-                '¡Turno Reservado!',
-                style: TextStyle(color: Colors.white, fontFamily: 'Playfair Display'),
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (stateContext, setDialogState) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Color(0xFFD4AF37)),
+                SizedBox(width: 12),
+                Text(
+                  '¡Turno Reservado!',
+                  style: TextStyle(color: Colors.white, fontFamily: 'Playfair Display'),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Cliente: $customerName', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 8),
+                Text('Servicio: ${_selectedService?.name}', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 8),
+                Text('Barbero: ${_selectedBarber?.name}', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 8),
+                Text('Fecha: $formattedDate', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 8),
+                Text('Horario: $formattedTime hs', style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 16),
+                const Text(
+                  'Presioná "NOTIFICAR POR WHATSAPP" para avisarle a tu barbero.',
+                  style: TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.send, size: 18),
+                label: const Text('NOTIFICAR POR WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                onPressed: isNotifying
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          isNotifying = true;
+                        });
+                        final result = await WhatsAppService().sendBookingMessage(appointmentToNotify);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result.message),
+                            backgroundColor: result.success ? const Color(0xFF2E7D32) : Colors.redAccent,
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                        if (result.success) {
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop();
+                          }
+                          setState(() {
+                            _selectedTimeSlot = null;
+                          });
+                        } else {
+                          setDialogState(() {
+                            isNotifying = false;
+                          });
+                        }
+                      },
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _selectedTimeSlot = null;
+                  });
+                },
+                child: const Text(
+                  'ENTENDIDO',
+                  style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Cliente: $customerName', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Text('Servicio: ${_selectedService?.name}', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Text('Barbero: ${_selectedBarber?.name}', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Text('Fecha: $formattedDate', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Text('Horario: $formattedTime hs', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
-              const Text(
-                'Presioná "NOTIFICAR POR WHATSAPP" para avisarle a tu barbero.',
-                style: TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF25D366),
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.send, size: 18),
-              label: const Text('NOTIFICAR POR WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              onPressed: () {
-                WhatsAppService().sendBookingMessage(appointmentToNotify);
-              },
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  _selectedTimeSlot = null;
-                });
-              },
-              child: const Text(
-                'ENTENDIDO',
-                style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
         ),
       );
     } catch (e) {

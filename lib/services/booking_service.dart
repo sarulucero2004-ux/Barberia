@@ -8,13 +8,12 @@ import 'whatsapp_service.dart';
 
 class BookingService {
   final FirestoreService _firestoreService;
-  final WhatsAppService _whatsAppService;
+  final WhatsAppService? whatsAppService;
 
   BookingService({
     required FirestoreService firestoreService,
-    required WhatsAppService whatsAppService,
-  })  : _firestoreService = firestoreService,
-        _whatsAppService = whatsAppService;
+    this.whatsAppService,
+  })  : _firestoreService = firestoreService;
 
   /// Horas de inicio ya reservadas (no String de 'HH:MM - HH:MM').
   Stream<List<String>> getAppointmentsByDateAndBarber(String date, String barberId) {
@@ -47,7 +46,5 @@ class BookingService {
 
     // saveAppointment maneja la transacción y arroja error si ya está reservado
     await _firestoreService.saveAppointment(appointment);
-
-    await _whatsAppService.sendBookingMessage(appointment);
   }
 }
