@@ -40,6 +40,7 @@ dependencies:
   firebase_storage: ^12.0.1
   image_picker: ^1.1.2
   url_launcher: ^6.3.0
+  google_sign_in: ^6.2.2
   provider: ^6.0.0
 
 dev_dependencies:
@@ -67,6 +68,8 @@ flutter:
   assets:
     - assets/images/
     - assets/images/barberos/
+    - assets/images/galeria/ezequiel/
+    - assets/images/galeria/isaias/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

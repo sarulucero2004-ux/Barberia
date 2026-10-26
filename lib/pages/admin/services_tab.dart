@@ -15,36 +15,70 @@ class _ServicesTabState extends State<ServicesTab> {
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
+    final isCompact = MediaQuery.of(context).size.width < 700;
 
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isCompact ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'SERVICIOS',
-                style: TextStyle(
-                  color: Color(0xFFD4AF37),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+          if (isCompact)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'SERVICIOS',
+                  style: TextStyle(
+                    color: Color(0xFFD4AF37),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
                 ),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'Agregar Servicio',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showServiceDialog(context, null),
                 ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Agregar Servicio', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () => _showServiceDialog(context, null),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'SERVICIOS',
+                  style: TextStyle(
+                    color: Color(0xFFD4AF37),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'Agregar Servicio',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showServiceDialog(context, null),
+                ),
+              ],
+            ),
           const SizedBox(height: 20),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
@@ -165,6 +199,63 @@ class _ServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 600;
+    final serviceInfo = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          service.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          service.description,
+          style: const TextStyle(color: Colors.white54, fontSize: 13),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+    final servicePriceAndDuration = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '\$${service.price.toStringAsFixed(0)}',
+          style: const TextStyle(
+            color: Color(0xFFD4AF37),
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${service.durationMinutes} min',
+          style: const TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+      ],
+    );
+    final serviceActions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.edit, color: Color(0xFF2196F3), size: 20),
+          onPressed: onEdit,
+          tooltip: 'Editar',
+          visualDensity: isCompact ? VisualDensity.compact : VisualDensity.standard,
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete, color: Color(0xFFF44336), size: 20),
+          onPressed: onDelete,
+          tooltip: 'Eliminar',
+          visualDensity: isCompact ? VisualDensity.compact : VisualDensity.standard,
+        ),
+      ],
+    );
+
     return Card(
       color: const Color(0xFF1E1E1E),
       margin: const EdgeInsets.only(bottom: 12),
@@ -174,71 +265,53 @@ class _ServiceCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4AF37).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.content_cut, color: Color(0xFFD4AF37), size: 28),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: isCompact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    service.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD4AF37).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.content_cut,
+                          color: Color(0xFFD4AF37),
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: serviceInfo),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    service.description,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [servicePriceAndDuration, serviceActions],
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 24),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '\$${service.price.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: Color(0xFFD4AF37),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+              )
+            : Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4AF37).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.content_cut, color: Color(0xFFD4AF37), size: 28),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${service.durationMinutes} min',
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            IconButton(
-              icon: const Icon(Icons.edit, color: Color(0xFF2196F3), size: 20),
-              onPressed: onEdit,
-              tooltip: 'Editar',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Color(0xFFF44336), size: 20),
-              onPressed: onDelete,
-              tooltip: 'Eliminar',
-            ),
-          ],
-        ),
+                  const SizedBox(width: 20),
+                  Expanded(child: serviceInfo),
+                  const SizedBox(width: 24),
+                  servicePriceAndDuration,
+                  const SizedBox(width: 16),
+                  serviceActions,
+                ],
+              ),
       ),
     );
   }
@@ -293,62 +366,48 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
         style: const TextStyle(color: Colors.white),
       ),
       content: SizedBox(
-        width: 400,
+        width: MediaQuery.of(context).size.width < 480
+            ? MediaQuery.of(context).size.width * 0.82
+            : 400,
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Nombre del servicio'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Descripción'),
-                maxLines: 2,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _priceCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _inputDecoration('Precio (\$)'),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Requerido';
-                        if (double.tryParse(v) == null || double.parse(v) <= 0) {
-                          return 'Precio inválido';
-                        }
-                        return null;
-                      },
-                    ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nameCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _inputDecoration('Nombre del servicio'),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _inputDecoration('Descripción'),
+                  maxLines: 2,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                if (MediaQuery.of(context).size.width < 480)
+                  Column(
+                    children: [
+                      _buildPriceField(),
+                      const SizedBox(height: 12),
+                      _buildDurationField(),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(child: _buildPriceField()),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildDurationField()),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _durationCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _inputDecoration('Duración (min)'),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Requerido';
-                        final n = int.tryParse(v);
-                        if (n == null || n <= 0) return 'Inválido';
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -438,5 +497,36 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Widget _buildPriceField() {
+    return TextFormField(
+      controller: _priceCtrl,
+      style: const TextStyle(color: Colors.white),
+      decoration: _inputDecoration('Precio (\$)'),
+      keyboardType: TextInputType.number,
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) return 'Requerido';
+        if (double.tryParse(v) == null || double.parse(v) <= 0) {
+          return 'Precio inválido';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildDurationField() {
+    return TextFormField(
+      controller: _durationCtrl,
+      style: const TextStyle(color: Colors.white),
+      decoration: _inputDecoration('Duración (min)'),
+      keyboardType: TextInputType.number,
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) return 'Requerido';
+        final n = int.tryParse(v);
+        if (n == null || n <= 0) return 'Inválido';
+        return null;
+      },
+    );
   }
 }

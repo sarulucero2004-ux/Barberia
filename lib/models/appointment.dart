@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'appointment_status.dart';
 
 class Appointment {
@@ -14,6 +16,8 @@ class Appointment {
   final String date;
   final String time;
   final AppointmentStatus status;
+  final DateTime? appointmentDateTime;
+  final DateTime? createdAt;
 
   Appointment({
     required this.id,
@@ -29,6 +33,8 @@ class Appointment {
     required this.date,
     required this.time,
     this.status = AppointmentStatus.pending,
+    this.appointmentDateTime,
+    this.createdAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -64,7 +70,15 @@ class Appointment {
       date: map['date'] ?? '',
       time: map['time'] ?? '',
       status: AppointmentStatus.fromString(map['status'] ?? 'pending'),
+      appointmentDateTime: _toDateTime(map['appointmentDateTime']),
+      createdAt: _toDateTime(map['timestamp']),
     );
+  }
+
+  static DateTime? _toDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
   }
 
   Appointment copyWith({
@@ -81,6 +95,8 @@ class Appointment {
     String? date,
     String? time,
     AppointmentStatus? status,
+    DateTime? appointmentDateTime,
+    DateTime? createdAt,
   }) {
     return Appointment(
       id: id ?? this.id,
@@ -96,31 +112,73 @@ class Appointment {
       date: date ?? this.date,
       time: time ?? this.time,
       status: status ?? this.status,
+      appointmentDateTime: appointmentDateTime ?? this.appointmentDateTime,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  DateTime? getParsedDateTime() {
-    try {
-      final months = {
-        'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
-        'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
-      };
-      final cleanDate = date.toLowerCase().trim();
-      final parts = cleanDate.split(' de ');
-      if (parts.length == 3) {
-        final day = int.parse(parts[0]);
-        final monthStr = parts[1];
-        final year = int.parse(parts[2]);
-        final month = months[monthStr] ?? 1;
+  static const Map<String, int> _months = {
+    'enero': 1,
+    'febrero': 2,
+    'marzo': 3,
+    'abril': 4,
+    'mayo': 5,
+    'junio': 6,
+    'julio': 7,
+    'agosto': 8,
+    'septiembre': 9,
+    'octubre': 10,
+    'noviembre': 11,
+    'diciembre': 12,
+  };
 
-        final startTimeStr = time.split(' - ').first;
-        final timeParts = startTimeStr.split(':');
-        final hour = int.parse(timeParts[0]);
-        final minute = int.parse(timeParts[1]);
+  /// Interpreta el formato "4 de Julio de 2026" + "09:00" sin normalizar.
+  ///
+  /// Devuelve `null` si la fecha o la hora son imposibles (por ejemplo
+  /// "31 de febrero" o "25:00"). No asume enero ni deja que [DateTime] corrija
+  /// un desbordamiento de día/mes, porque eso convertiría un turno inválido en
+  /// un turno silenciosamente distinto.
+  static DateTime? parseSchedule({required String date, required String time}) {
+    final cleanDate = date.toLowerCase().trim();
+    final parts = cleanDate.split(' de ');
+    if (parts.length != 3) return null;
 
-        return DateTime(year, month, day, hour, minute);
-      }
-    } catch (_) {}
-    return null;
+    final day = int.tryParse(parts[0].trim());
+    final month = _months[parts[1].trim()];
+    final year = int.tryParse(parts[2].trim());
+    if (day == null || month == null || year == null) return null;
+    if (year < 2000 || year > 2100) return null;
+
+    final startTimeStr = time.split(' - ').first.trim();
+    final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(startTimeStr);
+    if (match == null) return null;
+    final hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    if (hour > 23 || minute > 59) return null;
+
+    final parsed = DateTime(year, month, day, hour, minute);
+    if (parsed.year != year ||
+        parsed.month != month ||
+        parsed.day != day ||
+        parsed.hour != hour ||
+        parsed.minute != minute) {
+      return null;
+    }
+    return parsed;
+  }
+
+  DateTime? getParsedDateTime() => parseSchedule(date: date, time: time);
+
+  /// `true` solo si el documento guarda una fecha/hora que coincide al minuto
+  /// con la que se deduce de `date` + `time`.
+  bool hasConsistentAppointmentDateTime() {
+    final parsed = getParsedDateTime();
+    final stored = appointmentDateTime;
+    if (parsed == null || stored == null) return false;
+    return parsed.year == stored.year &&
+        parsed.month == stored.month &&
+        parsed.day == stored.day &&
+        parsed.hour == stored.hour &&
+        parsed.minute == stored.minute;
   }
 }

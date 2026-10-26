@@ -29,9 +29,10 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
     final adminProvider = context.read<AdminProvider>();
     // Solo los turnos del barbero de este administrador.
     final adminBarberId = context.watch<AuthProvider>().barberId;
+    final isCompact = MediaQuery.of(context).size.width < 700;
 
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isCompact ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -111,50 +112,61 @@ class _AppointmentsTabState extends State<AppointmentsTab> {
   }
 
   Widget _buildSearchAndFilters() {
+    final isCompact = MediaQuery.of(context).size.width < 700;
+    final searchField = TextField(
+      controller: _searchController,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'Buscar por cliente, barbero, fecha...',
+        hintStyle: const TextStyle(color: Colors.white38),
+        prefixIcon: const Icon(Icons.search, color: Colors.white54),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, color: Colors.white54),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFF2A2A2A),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0x33FFFFFF)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0x33FFFFFF)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+    );
+
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Buscar por cliente, barbero, fecha...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white54),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: const Color(0xFF2A2A2A),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0x33FFFFFF)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0x33FFFFFF)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFD4AF37)),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
-              ),
-            ),
-            const SizedBox(width: 16),
-            _buildStatusFilter(),
-          ],
-        ),
+        if (isCompact)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              searchField,
+              const SizedBox(height: 12),
+              _buildStatusFilter(),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(child: searchField),
+              const SizedBox(width: 16),
+              _buildStatusFilter(),
+            ],
+          ),
       ],
     );
   }
@@ -233,9 +245,14 @@ class _AppointmentCard extends StatelessWidget {
     required this.onChanged,
   });
 
+  Timestamp? get _expectedCreatedAt => appointment.createdAt == null
+      ? null
+      : Timestamp.fromDate(appointment.createdAt!);
+
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor(appointment.status);
+    final isCompact = MediaQuery.of(context).size.width < 600;
 
     return Card(
       color: const Color(0xFF1E1E1E),
@@ -246,46 +263,67 @@ class _AppointmentCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: isCompact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    appointment.customerName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  _buildAppointmentDetails(),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusDropdown(context),
+                      if (appointment.status != AppointmentStatus.cancelled)
+                        _buildCancelButton(context),
+                      _buildEditButton(context),
+                      _buildDeleteButton(context),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  _detailRow(Icons.content_cut, 'Servicio', appointment.serviceName),
-                  _detailRow(Icons.person, 'Barbero', appointment.barberName),
-                  _detailRow(Icons.calendar_today, 'Fecha', appointment.date),
-                  _detailRow(Icons.access_time, 'Hora', appointment.time),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(flex: 3, child: _buildAppointmentDetails()),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _buildStatusDropdown(context),
+                      const SizedBox(height: 8),
+                      if (appointment.status != AppointmentStatus.cancelled)
+                        _buildCancelButton(context),
+                      const SizedBox(height: 8),
+                      _buildEditButton(context),
+                      const SizedBox(height: 8),
+                      _buildDeleteButton(context),
+                    ],
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _buildStatusDropdown(context),
-                const SizedBox(height: 8),
-                if (appointment.status != AppointmentStatus.cancelled)
-                  _buildCancelButton(context),
-                const SizedBox(height: 8),
-                _buildEditButton(context),
-                const SizedBox(height: 8),
-                _buildDeleteButton(context),
-              ],
-            ),
-          ],
-        ),
       ),
+    );
+  }
+
+  Widget _buildAppointmentDetails() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          appointment.customerName,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _detailRow(Icons.content_cut, 'Servicio', appointment.serviceName),
+        _detailRow(Icons.person, 'Barbero', appointment.barberName),
+        _detailRow(Icons.calendar_today, 'Fecha', appointment.date),
+        _detailRow(Icons.access_time, 'Hora', appointment.time),
+      ],
     );
   }
 
@@ -300,9 +338,12 @@ class _AppointmentCard extends StatelessWidget {
             '$label: ',
             style: const TextStyle(color: Colors.white38, fontSize: 13),
           ),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          Expanded(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -341,6 +382,8 @@ class _AppointmentCard extends StatelessWidget {
               await context.read<AdminProvider>().updateAppointmentStatus(
                     appointment.id,
                     value,
+                    expectedCreatedAt: _expectedCreatedAt,
+                    expectedUserId: appointment.userId,
                   );
               onChanged();
               if (context.mounted) {
@@ -415,6 +458,8 @@ class _AppointmentCard extends StatelessWidget {
       await context.read<AdminProvider>().updateAppointmentStatus(
             appointment.id,
             AppointmentStatus.cancelled,
+            expectedCreatedAt: _expectedCreatedAt,
+            expectedUserId: appointment.userId,
           );
       onChanged();
       if (context.mounted) {
@@ -498,7 +543,11 @@ class _AppointmentCard extends StatelessWidget {
 
   Future<void> _performDelete(BuildContext context) async {
     try {
-      await context.read<AdminProvider>().deleteAppointment(appointment.id);
+      await context.read<AdminProvider>().deleteAppointment(
+            appointment.id,
+            expectedCreatedAt: _expectedCreatedAt,
+            expectedUserId: appointment.userId,
+          );
       onChanged();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -589,20 +638,24 @@ class _EditAppointmentDialogState extends State<_EditAppointmentDialog> {
       backgroundColor: const Color(0xFF1E1E1E),
       title: const Text('Editar Turno', style: TextStyle(color: Colors.white)),
       content: SizedBox(
-        width: 400,
+        width: MediaQuery.of(context).size.width < 480
+            ? MediaQuery.of(context).size.width * 0.82
+            : 400,
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildField('Fecha (Ej: 4 de Julio de 2026)', _dateController),
-              const SizedBox(height: 12),
-              _buildField('Hora (Ej: 09:00)', _timeController),
-              const SizedBox(height: 12),
-              _buildField('Servicio', _serviceController),
-              const SizedBox(height: 12),
-              _buildField('Barbero', _barberController),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildField('Fecha (Ej: 4 de Julio de 2026)', _dateController),
+                const SizedBox(height: 12),
+                _buildField('Hora (Ej: 09:00)', _timeController),
+                const SizedBox(height: 12),
+                _buildField('Servicio', _serviceController),
+                const SizedBox(height: 12),
+                _buildField('Barbero', _barberController),
+              ],
+            ),
           ),
         ),
       ),
@@ -661,11 +714,30 @@ class _EditAppointmentDialogState extends State<_EditAppointmentDialog> {
     setState(() => _isSaving = true);
 
     try {
-    final adminProvider = context.read<AdminProvider>();
+      final adminProvider = context.read<AdminProvider>();
       final startTime = _timeController.text.trim();
+      final dateStr = _dateController.text.trim();
+
+      final appointmentDateTime = Appointment.parseSchedule(
+        date: dateStr,
+        time: startTime,
+      );
+
+      if (appointmentDateTime == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('La fecha u hora del turno no es válida.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        setState(() => _isSaving = false);
+        return;
+      }
 
       final isBooked = await adminProvider.checkAvailabilityExcluding(
-        _dateController.text.trim(),
+        dateStr,
         widget.appointment.barberId,
         startTime,
         excludeId: widget.appointment.id,
@@ -685,13 +757,22 @@ class _EditAppointmentDialogState extends State<_EditAppointmentDialog> {
       }
 
       final timeStr = '$startTime - ${_calcEndTime(startTime)}';
-      await adminProvider.updateAppointment(widget.appointment.id, {
-        'date': _dateController.text.trim(),
-        'time': timeStr,
-        'startTime': startTime,
-        'serviceName': _serviceController.text.trim(),
-        'barberName': _barberController.text.trim(),
-      });
+
+      await adminProvider.updateAppointment(
+        widget.appointment.id,
+        {
+          'date': dateStr,
+          'time': timeStr,
+          'startTime': startTime,
+          'serviceName': _serviceController.text.trim(),
+          'barberName': _barberController.text.trim(),
+          'appointmentDateTime': Timestamp.fromDate(appointmentDateTime),
+        },
+        expectedCreatedAt: widget.appointment.createdAt == null
+            ? null
+            : Timestamp.fromDate(widget.appointment.createdAt!),
+        expectedUserId: widget.appointment.userId,
+      );
 
       if (mounted) {
         Navigator.of(context).pop();

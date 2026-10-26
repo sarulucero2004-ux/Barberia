@@ -34,56 +34,266 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
     }
 
-    // Reglas para usuarios
+    // Reglas para usuarios.
+    // El perfil propio se puede leer y crear como cliente. No se permite
+    // cambiar el rol, el barberId, el email ni el uid desde la app.
     match /usuarios/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.rol == 'cliente'
+        && request.resource.data.uid is string
+        && request.resource.data.nombre is string
+        && request.resource.data.apellido is string
+        && request.resource.data.email is string
+        && request.resource.data.rol is string
+        && request.resource.data.keys().hasOnly([
+          'uid', 'nombre', 'apellido', 'email', 'rol',
+          'fechaRegistro', 'proveedor'
+        ]);
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['nombre', 'apellido']);
+
+      allow delete: if false;
     }
 
-    // Reglas para turnos (contiene datos personales del cliente: lectura privada)
+    // Reglas para turnos (contiene datos personales del cliente: lectura privada).
     match /turnos/{turnoId} {
-      // Un administrador solo lee los turnos de SU barbero. El cliente sigue
-      // leyendo con autenticación, tal como antes.
-      //
-      // `resource == null` cubre la lectura de un slot inexistente que hace la
-      // transacción de reserva: no revela datos y mantiene ese flujo igual.
-      //
-      // Como la regla evalúa `barberId` por documento, cualquier consulta
-      // (`list`) debe acotar ese campo, que es lo que hace
-      // `getAppointmentsStream(barberId: ...)`. Una consulta sin acotar sería
-      // rechazada.
-      allow read: if request.auth != null && (
-        !esAdmin() ||
+      // El cliente solo lee sus propios turnos. El administrador solo los de su
+      // barbero. `resource == null` mantiene la lectura del slot inexistente
+      // que hace la transacción de reserva.
+      allow get: if request.auth != null && (
         resource == null ||
-        resource.data.barberId == miBarberId()
+        resource.data.userId == request.auth.uid ||
+        (esAdmin() && resource.data.barberId == miBarberId())
       );
 
-      // Los clientes reservan con cualquiera de los dos barberos: sin cambios.
-      allow create: if request.auth != null;
-
-      // El dueño del turno puede tocarlo, y el administrador solo los suyos.
-      // La comparación con `request.resource.data.barberId` impide que un
-      // administrador reasigne un turno al barbero del otro: el turno debe ser
-      // suyo ANTES y DESPUÉS de la edición.
-      allow update, delete: if request.auth != null && (
-        request.auth.uid == resource.data.userId ||
-        (esAdmin() &&
-         resource.data.barberId == miBarberId() &&
-         request.resource.data.barberId == miBarberId())
+      // Las consultas del cliente deben filtrar por `userId`; las del admin,
+      // por `barberId`. Es lo que hacen las consultas reales de la app.
+      allow list: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        (esAdmin() && resource.data.barberId == miBarberId())
       );
+
+      // El cliente crea únicamente su propio turno, en estado pendiente y con
+      // los campos que genera actualmente la aplicación. El administrador puede
+      // crear el turno movido al nuevo slot al editar fecha u hora, siempre
+      // dentro de su propio barbero.
+      allow create: if request.auth != null && (
+        (
+          request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.userId is string
+          && request.resource.data.customerName is string
+          && request.resource.data.customerEmail is string
+          && request.resource.data.barberId is string
+          && request.resource.data.barberName is string
+          && request.resource.data.barberPhone is string
+          && request.resource.data.serviceId is string
+          && request.resource.data.serviceName is string
+          && request.resource.data.servicePrice is number
+          && request.resource.data.date is string
+          && request.resource.data.time is string
+          && request.resource.data.startTime is string
+          && request.resource.data.status is string
+          && request.resource.data.appointmentDateTime is timestamp
+          && request.resource.data.keys().hasOnly([
+            'userId', 'customerName', 'customerEmail', 'barberId',
+            'barberName', 'barberPhone', 'serviceId', 'serviceName',
+            'servicePrice', 'date', 'time', 'startTime', 'status',
+            'appointmentDateTime', 'timestamp'
+          ])
+        )
+        || (
+          esAdmin()
+          && miBarberId() != ''
+          && request.resource.data.barberId == miBarberId()
+          && request.resource.data.customerName is string
+          && request.resource.data.customerEmail is string
+          && request.resource.data.barberId is string
+          && request.resource.data.barberName is string
+          && request.resource.data.barberPhone is string
+          && request.resource.data.serviceId is string
+          && request.resource.data.serviceName is string
+          && request.resource.data.servicePrice is number
+          && request.resource.data.date is string
+          && request.resource.data.time is string
+          && request.resource.data.startTime is string
+          && request.resource.data.status in [
+            'pending', 'confirmed', 'cancelled', 'completed'
+          ]
+          && request.resource.data.appointmentDateTime is timestamp
+          && request.resource.data.keys().hasOnly([
+            'userId', 'customerName', 'customerEmail', 'barberId',
+            'barberName', 'barberPhone', 'serviceId', 'serviceName',
+            'servicePrice', 'date', 'time', 'startTime', 'status',
+            'appointmentDateTime', 'timestamp'
+          ])
+        )
+      );
+
+      // El administrador solo modifica los turnos de su barbero y no puede
+      // reasignarlos al otro. Si cambia fecha u hora también debe actualizar
+      // `appointmentDateTime`; los turnos legacy pueden seguir cambiando solo
+      // su estado sin ese campo.
+      allow update: if request.auth != null && esAdmin()
+        && resource.data.barberId == miBarberId()
+        && request.resource.data.barberId == miBarberId()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'date', 'time', 'startTime', 'serviceName', 'barberName', 'status',
+          'appointmentDateTime'
+        ])
+        && request.resource.data.date is string
+        && request.resource.data.time is string
+        && request.resource.data.startTime is string
+        && request.resource.data.status in [
+          'pending', 'confirmed', 'cancelled', 'completed'
+        ]
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'date', 'time', 'startTime'
+          ])
+          || request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'appointmentDateTime'
+          ])
+        )
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'appointmentDateTime'
+          ])
+          || request.resource.data.appointmentDateTime is timestamp
+        );
+
+      // El cliente no borra turnos; el administrador solo los de su barbero.
+      allow delete: if request.auth != null && esAdmin()
+        && resource.data.barberId == miBarberId();
     }
 
     // Reglas para disponibilidad pública (espejo de turnos SIN datos personales).
     // Solo barberId, date, startTime y status, por eso la lectura es pública.
-    // La escritura exige autenticación: los visitantes anónimos no pueden
-    // crear, modificar ni eliminar disponibilidad.
     match /disponibilidad/{slotId} {
       allow read: if true;
-      allow write: if request.auth != null;
+
+      // La reserva crea el espejo en estado pendiente. El admin puede crear
+      // espejos completos solo para su barbero, o documentos legacy que solo
+      // tengan `status`.
+      allow create: if request.auth != null && (
+        (
+          request.resource.data.status == 'pending'
+          && request.resource.data.barberId is string
+          && request.resource.data.date is string
+          && request.resource.data.startTime is string
+          && request.resource.data.status is string
+          && request.resource.data.keys().hasOnly([
+            'barberId', 'date', 'startTime', 'status', 'turnoId'
+          ])
+          && (
+            !request.resource.data.keys().hasAny(['turnoId'])
+            || request.resource.data.turnoId == slotId
+          )
+          && !exists(/databases/$(database)/documents/turnos/$(slotId))
+          && existsAfter(/databases/$(database)/documents/turnos/$(slotId))
+          && getAfter(/databases/$(database)/documents/turnos/$(slotId)).data.userId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/turnos/$(slotId)).data.barberId == request.resource.data.barberId
+          && getAfter(/databases/$(database)/documents/turnos/$(slotId)).data.date == request.resource.data.date
+          && getAfter(/databases/$(database)/documents/turnos/$(slotId)).data.startTime == request.resource.data.startTime
+          && getAfter(/databases/$(database)/documents/turnos/$(slotId)).data.status == request.resource.data.status
+        )
+        || (
+          esAdmin() && (
+            (
+              request.resource.data.keys().hasOnly(['status'])
+              && request.resource.data.status in [
+                'pending', 'confirmed', 'cancelled', 'completed'
+              ]
+            )
+            || (
+              miBarberId() != ''
+              && request.resource.data.barberId == miBarberId()
+              && request.resource.data.barberId is string
+              && request.resource.data.date is string
+              && request.resource.data.startTime is string
+              && request.resource.data.status in [
+                'pending', 'confirmed', 'cancelled', 'completed'
+              ]
+              && request.resource.data.keys().hasOnly([
+                'barberId', 'date', 'startTime', 'status', 'turnoId'
+              ])
+              && (
+                !request.resource.data.keys().hasAny(['turnoId'])
+                || request.resource.data.turnoId == slotId
+              )
+            )
+          )
+        )
+      );
+
+      // El cliente no modifica disponibilidad. El admin solo la de su barbero;
+      // se permite compatibilidad con documentos legacy sin `barberId` y con
+      // borrados de espejos inexistentes.
+      allow update: if request.auth != null && esAdmin() && (
+        (
+          !resource.data.keys().hasAny(['barberId'])
+          && request.resource.data.keys().hasOnly([
+            'barberId', 'date', 'startTime', 'status', 'turnoId'
+          ])
+          && request.resource.data.status in [
+            'pending', 'confirmed', 'cancelled', 'completed'
+          ]
+          && (
+            !request.resource.data.keys().hasAny(['turnoId'])
+            || request.resource.data.turnoId == slotId
+          )
+          && (
+            !request.resource.data.keys().hasAny(['barberId'])
+            || request.resource.data.barberId == miBarberId()
+          )
+          && (
+            !request.resource.data.keys().hasAny(['date'])
+            || request.resource.data.date is string
+          )
+          && (
+            !request.resource.data.keys().hasAny(['startTime'])
+            || request.resource.data.startTime is string
+          )
+        )
+        || (
+          resource.data.barberId == miBarberId()
+          && request.resource.data.barberId == miBarberId()
+          && request.resource.data.keys().hasOnly([
+            'barberId', 'date', 'startTime', 'status', 'turnoId'
+          ])
+          && request.resource.data.date is string
+          && request.resource.data.startTime is string
+          && request.resource.data.status in [
+            'pending', 'confirmed', 'cancelled', 'completed'
+          ]
+          && (
+            !request.resource.data.keys().hasAny(['turnoId'])
+            || request.resource.data.turnoId == slotId
+          )
+        )
+      );
+
+      allow delete: if request.auth != null && esAdmin() && (
+        resource == null ||
+        !resource.data.keys().hasAny(['barberId']) ||
+        resource.data.barberId == miBarberId()
+      );
     }
 
-    // NOTA: la configuración de horarios (`config/negocio`) NO tiene reglas en
-    // este archivo a propósito. Se despliega por separado, junto con la
-    // creación del documento, para poder aislar los problemas de cada cambio.
-    // Sin un `match /config`, toda lectura de esa colección queda denegada.
+    // Configuración de horarios del negocio (`config/negocio`).
+    // La agenda pública y la reserva necesitan leerla sin autenticarse.
+    // La escritura queda reservada al administrador.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
   }
 }

@@ -58,6 +58,36 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    final authProvider = context.read<AuthProvider>();
+    try {
+      final role = await authProvider.loginWithGoogle();
+      if (!mounted) return;
+
+      if (role == 'admin') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const AdminPanel(),
+          ),
+        );
+      } else {
+        widget.onLoginSuccess?.call();
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // No mostrar snackbar si el usuario simplemente canceló.
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.toLowerCase().contains('cancelado')) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -186,6 +216,55 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontSize: 16,
                             ),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // ── Separador visual ──
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Divider(color: Colors.white24, thickness: 1),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'O',
+                        style: TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                    ),
+                    const Expanded(
+                      child: Divider(color: Colors.white24, thickness: 1),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // ── Botón Google ──
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white30),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      backgroundColor: const Color(0xFF2A2A2A),
+                    ),
+                    onPressed: authProvider.isLoading ? null : _handleGoogleLogin,
+                    icon: const Icon(
+                      Icons.g_mobiledata,
+                      size: 26,
+                      color: Color(0xFF4285F4),
+                    ),
+                    label: const Text(
+                      'Continuar con Google',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

@@ -102,14 +102,21 @@ class _BookingFormState extends State<BookingForm> {
       // instancia anterior el Dropdown quedaría apuntando a un objeto que ya no
       // está en la lista y se dispararía el assert de dropdown.dart.
       // Por eso la selección se re-resuelve siempre por `id`.
+      final previousBarberId = _selectedBarber?.id;
       if (widget.barbers.isEmpty) {
         _selectedBarber = null;
       } else {
-        final currentId = _selectedBarber?.id;
+        final currentId = previousBarberId;
         final matches = currentId == null
             ? <Barber>[]
             : widget.barbers.where((b) => b.id == currentId).toList();
         _selectedBarber = matches.isNotEmpty ? matches.first : widget.barbers.first;
+      }
+      if (_selectedBarber?.id != previousBarberId) {
+        _selectedTimeSlot = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadBookedTimesForCurrentSelection();
+        });
       }
     }
   }
@@ -659,6 +666,13 @@ class _BookingFormState extends State<BookingForm> {
   Widget _buildTimeSlotList() {
     final bookingProvider = context.watch<BookingProvider>();
     final slots = _getTimeSlotsForDate(_selectedDate);
+
+    if (_selectedBarber == null) {
+      return _buildAvailabilityMessage(
+        icon: Icons.person_off,
+        message: 'No hay barberos disponibles para reservar.',
+      );
+    }
 
     // Sin `config/negocio` no se sabe qué horarios existen, así que no se
     // calcula la lista todavía: primero se resuelve el estado de la

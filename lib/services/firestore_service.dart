@@ -106,8 +106,11 @@ class FirestoreService {
 
   Future<void> saveAppointment(Appointment appointment) async {
     try {
-      final startTime = appointment.time.split(' - ').first;
-      final parsedDate = appointment.getParsedDateTime() ?? DateTime.now();
+      final startTime = appointment.time.split(' - ').first.trim();
+      final parsedDate = appointment.getParsedDateTime();
+      if (parsedDate == null) {
+        throw Exception('La fecha u hora del turno no es válida.');
+      }
 
       // Generar un ID único determinista basado en el barbero, la fecha y la hora del turno
       final slotId = _buildSlotId(
@@ -147,6 +150,7 @@ class FirestoreService {
           'date': appointment.date,
           'startTime': startTime,
           'status': appointment.status.toJson(),
+          'turnoId': slotId,
         });
       });
     } on FirebaseException catch (e) {
@@ -284,94 +288,399 @@ class FirestoreService {
 
   // ── Admin: Appointment CRUD ───────────────────────────────────────────────
 
-  Future<void> updateAppointmentStatus(
-      String appointmentId, AppointmentStatus newStatus) async {
-    try {
-      await _db.collection('turnos').doc(appointmentId).update({
-        'status': newStatus.toJson(),
-      });
-      // Espejo de disponibilidad: al marcar el turno como `cancelled` deja de
-      // bloquear el horario. Se propaga el estado en vez de borrar el documento
-      // para que reactivar un turno cancelado vuelva a bloquearlo. `set` con
-      // merge evita fallar si el documento todavía no existe (turnos creados
-      // antes de que existiera la colección `disponibilidad`).
-      await _disponibilidad.doc(appointmentId).set(
-        {'status': newStatus.toJson()},
-        SetOptions(merge: true),
+  String _slotIdFromTurno(Map<String, dynamic> data) {
+    final barberId = '${data['barberId'] ?? ''}';
+    final date = '${data['date'] ?? ''}';
+    final startTime =
+        '${data['startTime'] ?? '${data['time'] ?? ''}'.split(' - ').first}';
+
+    return _buildSlotId(barberId: barberId, date: date, startTime: startTime);
+  }
+
+  Map<String, dynamic> _availabilityDataFromTurno(
+    Map<String, dynamic> data, {
+    required String turnoId,
+  }) {
+    return {
+      'barberId': '${data['barberId'] ?? ''}',
+      'date': '${data['date'] ?? ''}',
+      'startTime':
+          '${data['startTime'] ?? '${data['time'] ?? ''}'.split(' - ').first}',
+      'status': '${data['status'] ?? AppointmentStatus.pending.toJson()}',
+      'turnoId': turnoId,
+    };
+  }
+
+  /// Un espejo pertenece al turno solo si lo declara (`turnoId`) o si su id es
+  /// exactamente el id del turno. Sin esa prueba, borrarlo o sobrescribirlo
+  /// podría destruir la disponibilidad de otro turno.
+  bool _isMirrorOwnedBy(
+    String mirrorId,
+    Map<String, dynamic>? mirrorData,
+    String turnoId,
+  ) {
+    if (mirrorData == null) return true;
+    final owner = mirrorData['turnoId'];
+    if (owner is String && owner.isNotEmpty) {
+      return owner == turnoId;
+    }
+    return mirrorId == turnoId;
+  }
+
+  /// Evita que una acción iniciada con datos viejos (por ejemplo tras mover un
+  /// turno y reutilizar el slot) afecte a un turno nuevo.
+  void _assertExpectedIdentity(
+    Map<String, dynamic> data, {
+    Timestamp? expectedCreatedAt,
+    String? expectedUserId,
+  }) {
+    if (expectedUserId != null && '${data['userId'] ?? ''}' != expectedUserId) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'stale-appointment',
+        message: 'El turno cambió desde que se cargó la lista.',
       );
+    }
+    if (expectedCreatedAt != null) {
+      final actual = data['timestamp'];
+      if (actual is! Timestamp ||
+          actual.millisecondsSinceEpoch !=
+              expectedCreatedAt.millisecondsSinceEpoch) {
+        throw FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'stale-appointment',
+          message: 'El turno cambió desde que se cargó la lista.',
+        );
+      }
+    }
+  }
+
+  Future<void> updateAppointmentStatus(
+      String appointmentId, AppointmentStatus newStatus,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
+    try {
+      await _db.runTransaction((transaction) async {
+        final turnoRef = _db.collection('turnos').doc(appointmentId);
+        final snapshot = await transaction.get(turnoRef);
+        if (!snapshot.exists || snapshot.data() == null) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'appointment-not-found',
+            message: 'El turno ya no existe.',
+          );
+        }
+
+        final turnoData = snapshot.data()!;
+        _assertExpectedIdentity(
+          turnoData,
+          expectedCreatedAt: expectedCreatedAt,
+          expectedUserId: expectedUserId,
+        );
+
+        final currentSlotId = _slotIdFromTurno(turnoData);
+        if (currentSlotId != appointmentId) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'inconsistent-slot',
+            message:
+                'El turno tiene un horario que no coincide con su id; actualízalo antes de cambiar el estado.',
+          );
+        }
+
+        final mirrorRef = _disponibilidad.doc(appointmentId);
+        final mirrorSnapshot = await transaction.get(mirrorRef);
+        if (mirrorSnapshot.exists &&
+            !_isMirrorOwnedBy(
+              appointmentId,
+              mirrorSnapshot.data(),
+              appointmentId,
+            )) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'mirror-conflict',
+            message:
+                'La disponibilidad de ese horario pertenece a otro turno.',
+          );
+        }
+
+        transaction.update(turnoRef, {'status': newStatus.toJson()});
+        transaction.set(
+          mirrorRef,
+          _availabilityDataFromTurno(
+            {...turnoData, 'status': newStatus.toJson()},
+            turnoId: appointmentId,
+          ),
+          SetOptions(merge: true),
+        );
+      });
     } on FirebaseException catch (e) {
+      if (e.code == 'appointment-not-found') {
+        throw Exception('El turno ya no existe.');
+      }
+      if (e.code == 'stale-appointment') {
+        throw Exception(
+            'El turno cambió desde que se cargó la lista. Actualiza e inténtalo de nuevo.');
+      }
+      if (e.code == 'inconsistent-slot') {
+        throw Exception(
+            'El turno tiene un horario inconsistente; no se cambió ningún documento.');
+      }
+      if (e.code == 'mirror-conflict') {
+        throw Exception(
+            'La disponibilidad de ese horario no pertenece a este turno; no se cambió ningún documento.');
+      }
       throw Exception('Error al actualizar el estado: ${e.message}');
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error inesperado al actualizar el estado.');
     }
   }
 
-  Future<void> deleteAppointment(String appointmentId) async {
+  Future<void> deleteAppointment(String appointmentId,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
     try {
-      await _db.collection('turnos').doc(appointmentId).delete();
-      // `appointmentId` es el slotId, el mismo id usado en `disponibilidad`.
-      // `delete` sobre un documento inexistente no lanza, por lo que los
-      // turnos anteriores a esta colección no rompen el borrado.
-      await _disponibilidad.doc(appointmentId).delete();
+      await _db.runTransaction((transaction) async {
+        final turnoRef = _db.collection('turnos').doc(appointmentId);
+        final snapshot = await transaction.get(turnoRef);
+        if (!snapshot.exists || snapshot.data() == null) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'appointment-not-found',
+            message: 'El turno ya no existe; no se eliminó nada.',
+          );
+        }
+
+        final turnoData = snapshot.data()!;
+        _assertExpectedIdentity(
+          turnoData,
+          expectedCreatedAt: expectedCreatedAt,
+          expectedUserId: expectedUserId,
+        );
+
+        final currentSlotId = _slotIdFromTurno(turnoData);
+
+        // Todas las lecturas van antes de cualquier escritura.
+        final mirrorSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        for (final id in <String>{currentSlotId, appointmentId}) {
+          final mirrorSnapshot = await transaction.get(_disponibilidad.doc(id));
+          if (mirrorSnapshot.exists &&
+              !_isMirrorOwnedBy(
+                id,
+                mirrorSnapshot.data(),
+                appointmentId,
+              )) {
+            throw FirebaseException(
+              plugin: 'cloud_firestore',
+              code: 'mirror-conflict',
+              message:
+                  'La disponibilidad de ese horario pertenece a otro turno.',
+            );
+          }
+          mirrorSnapshots[id] = mirrorSnapshot;
+        }
+
+        transaction.delete(turnoRef);
+        for (final entry in mirrorSnapshots.entries) {
+          if (entry.value.exists) {
+            transaction.delete(_disponibilidad.doc(entry.key));
+          }
+        }
+      });
     } on FirebaseException catch (e) {
+      if (e.code == 'appointment-not-found') {
+        throw Exception('El turno ya no existe; no se eliminó nada.');
+      }
+      if (e.code == 'stale-appointment') {
+        throw Exception(
+            'El turno cambió desde que se cargó la lista. Actualiza e inténtalo de nuevo.');
+      }
+      if (e.code == 'mirror-conflict') {
+        throw Exception(
+            'La disponibilidad de ese horario no pertenece a este turno; no se eliminó nada.');
+      }
       throw Exception('Error al eliminar el turno: ${e.message}');
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error inesperado al eliminar el turno.');
     }
   }
 
   Future<void> updateAppointment(
-      String appointmentId, Map<String, dynamic> data) async {
+      String appointmentId, Map<String, dynamic> data,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
     try {
-      await _db.collection('turnos').doc(appointmentId).update(data);
-      await _syncAvailabilityAfterEdit(appointmentId, data);
+      await _db.runTransaction((transaction) async {
+        final turnoRef = _db.collection('turnos').doc(appointmentId);
+        final snapshot = await transaction.get(turnoRef);
+        if (!snapshot.exists || snapshot.data() == null) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'appointment-not-found',
+            message: 'El turno ya no existe.',
+          );
+        }
+
+        final oldData = snapshot.data()!;
+        _assertExpectedIdentity(
+          oldData,
+          expectedCreatedAt: expectedCreatedAt,
+          expectedUserId: expectedUserId,
+        );
+
+        final oldSlotId = _slotIdFromTurno(oldData);
+        final updatedData = <String, dynamic>{...oldData, ...data};
+        final newSlotId = _slotIdFromTurno(updatedData);
+
+        if (data['appointmentDateTime'] is Timestamp) {
+          final expected = Appointment.parseSchedule(
+            date: '${updatedData['date'] ?? ''}',
+            time: '${updatedData['time'] ?? ''}',
+          );
+          final provided = data['appointmentDateTime'] as Timestamp;
+          if (expected == null ||
+              provided.toDate().year != expected.year ||
+              provided.toDate().month != expected.month ||
+              provided.toDate().day != expected.day ||
+              provided.toDate().hour != expected.hour ||
+              provided.toDate().minute != expected.minute) {
+            throw FirebaseException(
+              plugin: 'cloud_firestore',
+              code: 'invalid-datetime',
+              message:
+                  'La fecha y hora del turno no coinciden con la fecha programada.',
+            );
+          }
+        }
+
+        // Espejos que este turno podría ocupar/vaciar. Se leen todos antes de
+        // escribir para respetar el orden de las transacciones.
+        final mirrorSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        for (final id in <String>{oldSlotId, appointmentId}) {
+          final mirrorSnapshot = await transaction.get(_disponibilidad.doc(id));
+          if (mirrorSnapshot.exists &&
+              !_isMirrorOwnedBy(
+                id,
+                mirrorSnapshot.data(),
+                appointmentId,
+              )) {
+            throw FirebaseException(
+              plugin: 'cloud_firestore',
+              code: 'mirror-conflict',
+              message:
+                  'La disponibilidad de ese horario pertenece a otro turno.',
+            );
+          }
+          mirrorSnapshots[id] = mirrorSnapshot;
+        }
+
+        if (newSlotId == appointmentId) {
+          transaction.update(turnoRef, data);
+          for (final entry in mirrorSnapshots.entries) {
+            if (entry.key != appointmentId && entry.value.exists) {
+              transaction.delete(_disponibilidad.doc(entry.key));
+            }
+          }
+          transaction.set(
+            _disponibilidad.doc(appointmentId),
+            _availabilityDataFromTurno(updatedData, turnoId: appointmentId),
+            SetOptions(merge: true),
+          );
+          return;
+        }
+
+        final newTurnoRef = _db.collection('turnos').doc(newSlotId);
+        final targetSnapshot = await transaction.get(newTurnoRef);
+        if (targetSnapshot.exists) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'already-booked',
+            message: 'El horario ya se encuentra ocupado.',
+          );
+        }
+
+        // Al mover se reescribe el documento completo, así que debe cumplir el
+        // contrato estricto de las reglas. Los campos legacy desconocidos se
+        // rechazan en vez de perderse silenciosamente.
+        const allowedKeys = {
+          'userId', 'customerName', 'customerEmail', 'barberId',
+          'barberName', 'barberPhone', 'serviceId', 'serviceName',
+          'servicePrice', 'date', 'time', 'startTime', 'status',
+          'appointmentDateTime', 'timestamp',
+        };
+        final extraKeys = updatedData.keys
+            .where((key) => !allowedKeys.contains(key))
+            .toList();
+        if (extraKeys.isNotEmpty) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'incompatible-fields',
+            message:
+                'El turno contiene campos no compatibles con el traslado: ${extraKeys.join(', ')}.',
+          );
+        }
+        if (updatedData['appointmentDateTime'] is! Timestamp) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'invalid-datetime',
+            message:
+                'El turno no tiene una fecha y hora válidas para trasladarlo.',
+          );
+        }
+
+        final targetMirrorSnapshot = mirrorSnapshots[newSlotId] ??
+            await transaction.get(_disponibilidad.doc(newSlotId));
+        if (targetMirrorSnapshot.exists &&
+            !_isMirrorOwnedBy(
+              newSlotId,
+              targetMirrorSnapshot.data(),
+              appointmentId,
+            )) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'mirror-conflict',
+            message:
+                'Ya existe una disponibilidad que no pertenece a este turno en el horario destino.',
+          );
+        }
+
+        // El id del turno es también el id del slot. Al mover ambos documentos
+        // juntos se evita dejar un turno sin espejo o un espejo sin turno.
+        transaction.set(newTurnoRef, updatedData);
+        transaction.delete(turnoRef);
+        for (final entry in mirrorSnapshots.entries) {
+          if (entry.key != newSlotId && entry.value.exists) {
+            transaction.delete(_disponibilidad.doc(entry.key));
+          }
+        }
+        transaction.set(
+          _disponibilidad.doc(newSlotId),
+          _availabilityDataFromTurno(updatedData, turnoId: newSlotId),
+          SetOptions(merge: true),
+        );
+      });
     } on FirebaseException catch (e) {
+      if (e.code == 'already-booked') {
+        throw Exception('El horario ya se encuentra ocupado.');
+      }
+      if (e.code == 'appointment-not-found') {
+        throw Exception('El turno ya no existe.');
+      }
+      if (e.code == 'stale-appointment') {
+        throw Exception(
+            'El turno cambió desde que se cargó la lista. Actualiza e inténtalo de nuevo.');
+      }
+      if (e.code == 'mirror-conflict') {
+        throw Exception(
+            'La disponibilidad del horario no pertenece a este turno; no se realizaron cambios.');
+      }
+      if (e.code == 'incompatible-fields' || e.code == 'invalid-datetime') {
+        throw Exception(e.message ?? 'El turno no se puede trasladar.');
+      }
       throw Exception('Error al actualizar el turno: ${e.message}');
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Error inesperado al actualizar el turno.');
     }
-  }
-
-  /// Mantiene alineado el espejo de disponibilidad tras editar un turno.
-  ///
-  /// `appointmentId` es el slotId original (ver `saveAppointment`), así que el
-  /// documento viejo de disponibilidad se identifica con ese mismo id. Si la
-  /// edición cambia barbero, fecha u hora, el slot es otro: se libera el
-  /// anterior y se publica el nuevo, para no dejar bloqueando un horario que
-  /// ya no tiene turno asociado.
-  Future<void> _syncAvailabilityAfterEdit(
-      String appointmentId, Map<String, dynamic> data) async {
-    final newStatus = data['status']?.toString();
-    if (newStatus != null) {
-      await _disponibilidad.doc(appointmentId)
-          .set({'status': newStatus}, SetOptions(merge: true));
-    }
-
-    const slotKeys = ['barberId', 'date', 'time', 'startTime'];
-    if (!slotKeys.any(data.containsKey)) return;
-
-    // Se relee el turno porque `update` ya aplicó los cambios: de ahí salen
-    // los valores definitivos del nuevo slot.
-    final snapshot = await _db.collection('turnos').doc(appointmentId).get();
-    if (!snapshot.exists) return;
-    final current = snapshot.data()!;
-
-    final barberId = '${current['barberId'] ?? ''}';
-    final date = '${current['date'] ?? ''}';
-    final startTime = '${current['startTime'] ?? '${current['time'] ?? ''}'.split(' - ').first}';
-
-    final newSlotId =
-        _buildSlotId(barberId: barberId, date: date, startTime: startTime);
-
-    if (newSlotId != appointmentId) {
-      await _disponibilidad.doc(appointmentId).delete();
-    }
-    await _disponibilidad.doc(newSlotId).set({
-      'barberId': barberId,
-      'date': date,
-      'startTime': startTime,
-      'status': '${current['status'] ?? AppointmentStatus.pending.toJson()}',
-    }, SetOptions(merge: true));
   }
 
   Future<bool> checkExistingBookingExcluding(

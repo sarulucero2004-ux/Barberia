@@ -15,36 +15,70 @@ class _BarbersTabState extends State<BarbersTab> {
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
+    final isCompact = MediaQuery.of(context).size.width < 700;
 
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isCompact ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'BARBEROS',
-                style: TextStyle(
-                  color: Color(0xFFD4AF37),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+          if (isCompact)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'BARBEROS',
+                  style: TextStyle(
+                    color: Color(0xFFD4AF37),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
                 ),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'Agregar Barbero',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showBarberDialog(context, null),
                 ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Agregar Barbero', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () => _showBarberDialog(context, null),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'BARBEROS',
+                  style: TextStyle(
+                    color: Color(0xFFD4AF37),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'Agregar Barbero',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showBarberDialog(context, null),
+                ),
+              ],
+            ),
           const SizedBox(height: 20),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
@@ -165,6 +199,76 @@ class _BarberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 600;
+    final image = ClipOval(
+      child: SizedBox(
+        width: 56,
+        height: 56,
+        child: barber.imageUrl == null
+            ? _barberPlaceholder()
+            : Image.asset(
+                barber.imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _barberPlaceholder(),
+              ),
+      ),
+    );
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          barber.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          barber.specialty,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+        if (!barber.activo) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Inactivo',
+            style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+          ),
+        ],
+        if (isCompact) ...[
+          const SizedBox(height: 4),
+          Text(
+            barber.phone,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.edit, color: Color(0xFF2196F3), size: 20),
+          onPressed: onEdit,
+          tooltip: 'Editar',
+          visualDensity: isCompact ? VisualDensity.compact : VisualDensity.standard,
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete, color: Color(0xFFF44336), size: 20),
+          onPressed: onDelete,
+          tooltip: 'Eliminar',
+          visualDensity: isCompact ? VisualDensity.compact : VisualDensity.standard,
+        ),
+      ],
+    );
+
     return Card(
       color: const Color(0xFF1E1E1E),
       margin: const EdgeInsets.only(bottom: 12),
@@ -174,70 +278,42 @@ class _BarberCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            ClipOval(
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: Image.asset(
-                  barber.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.white12,
-                    child: const Icon(Icons.person, color: Colors.white54, size: 28),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: isCompact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    barber.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  Row(
+                    children: [
+                      image,
+                      const SizedBox(width: 12),
+                      Expanded(child: details),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  Align(alignment: Alignment.centerRight, child: actions),
+                ],
+              )
+            : Row(
+                children: [
+                  image,
+                  const SizedBox(width: 20),
+                  Expanded(child: details),
+                  const SizedBox(width: 24),
                   Text(
-                    barber.specialty,
+                    barber.phone,
                     style: const TextStyle(color: Colors.white54, fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(width: 16),
+                  actions,
                 ],
               ),
-            ),
-            const SizedBox(width: 24),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  barber.phone,
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            IconButton(
-              icon: const Icon(Icons.edit, color: Color(0xFF2196F3), size: 20),
-              onPressed: onEdit,
-              tooltip: 'Editar',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Color(0xFFF44336), size: 20),
-              onPressed: onDelete,
-              tooltip: 'Eliminar',
-            ),
-          ],
-        ),
       ),
+    );
+  }
+
+  Widget _barberPlaceholder() {
+    return Container(
+      color: Colors.white12,
+      child: const Icon(Icons.person, color: Colors.white54, size: 28),
     );
   }
 }
@@ -286,7 +362,9 @@ class _BarberFormDialogState extends State<_BarberFormDialog> {
         style: const TextStyle(color: Colors.white),
       ),
       content: SizedBox(
-        width: 400,
+        width: MediaQuery.of(context).size.width < 480
+            ? MediaQuery.of(context).size.width * 0.82
+            : 400,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(

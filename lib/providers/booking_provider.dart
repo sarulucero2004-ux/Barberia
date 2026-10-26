@@ -52,7 +52,8 @@ class BookingProvider extends ChangeNotifier {
   StreamSubscription<User?>? _authSubscription;
 
   List<Service> get services => _services;
-  List<Barber> get barbers => _barbers;
+  List<Barber> get barbers =>
+      _barbers.where((barber) => barber.activo).toList(growable: false);
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   Set<String> get bookedTimes => _bookedTimes;

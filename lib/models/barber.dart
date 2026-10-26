@@ -13,14 +13,14 @@ class Barber {
     this.activo = true,
   });
 
-  String get imageAssetPath {
+  String? get imageAssetPath {
     // B1 y B2 son IDs fijos: se resuelven primero por ID para que un cambio de
     // `nombre` en Firestore no rompa el asset local.
     switch (id) {
       case 'B1':
-        return 'assets/images/barberos/ezequiel.jpg';
+        return 'assets/images/barber_ezequiel.png';
       case 'B2':
-        return 'assets/images/barberos/isaias.jpg';
+        return 'assets/images/barber_isaias.png';
     }
 
     final cleanName = name
@@ -34,15 +34,14 @@ class Barber {
         .replaceAll('ñ', 'n');
 
     if (cleanName.contains('ezequiel')) {
-      return 'assets/images/barberos/ezequiel.jpg';
+      return 'assets/images/barber_ezequiel.png';
     } else if (cleanName.contains('isaias')) {
-      return 'assets/images/barberos/isaias.jpg';
-    } else {
-      return 'assets/images/barberos/$cleanName.jpg';
+      return 'assets/images/barber_isaias.png';
     }
+    return null;
   }
 
-  String get imageUrl => imageAssetPath;
+  String? get imageUrl => imageAssetPath;
 
   Map<String, dynamic> toMap() {
     return {

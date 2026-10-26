@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1019726805573-sli7m63r5qq44du39hdtq8ive2lsb6tt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.barberia",
+            "certificate_hash": "681086fee3849c2aae0d21fb1fc5c12a13eeca5a"
+          }
+        },
+        {
           "client_id": "1019726805573-npjhojdlvldp37qtsg48g91vk015j54h.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +37,13 @@
             {
               "client_id": "1019726805573-npjhojdlvldp37qtsg48g91vk015j54h.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "1019726805573-tcm0dlmorlpn990lbr6tv9ijp2nuaku9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.barberia"
+              }
             }
           ]
         }

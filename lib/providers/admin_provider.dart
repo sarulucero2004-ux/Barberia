@@ -64,17 +64,34 @@ class AdminProvider extends ChangeNotifier {
 }
 
   Future<void> updateAppointmentStatus(
-      String appointmentId, AppointmentStatus status) async {
-    await _firestoreService.updateAppointmentStatus(appointmentId, status);
+      String appointmentId, AppointmentStatus status,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
+    await _firestoreService.updateAppointmentStatus(
+      appointmentId,
+      status,
+      expectedCreatedAt: expectedCreatedAt,
+      expectedUserId: expectedUserId,
+    );
   }
 
-  Future<void> deleteAppointment(String appointmentId) async {
-    await _firestoreService.deleteAppointment(appointmentId);
+  Future<void> deleteAppointment(String appointmentId,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
+    await _firestoreService.deleteAppointment(
+      appointmentId,
+      expectedCreatedAt: expectedCreatedAt,
+      expectedUserId: expectedUserId,
+    );
   }
 
   Future<void> updateAppointment(
-      String appointmentId, Map<String, dynamic> data) async {
-    await _firestoreService.updateAppointment(appointmentId, data);
+      String appointmentId, Map<String, dynamic> data,
+      {Timestamp? expectedCreatedAt, String? expectedUserId}) async {
+    await _firestoreService.updateAppointment(
+      appointmentId,
+      data,
+      expectedCreatedAt: expectedCreatedAt,
+      expectedUserId: expectedUserId,
+    );
   }
 
   Future<bool> checkAvailabilityExcluding(

@@ -15,6 +15,7 @@ class AdminPanel extends StatefulWidget {
 }
 
 class _AdminPanelState extends State<AdminPanel> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
 
   static const List<String> _titles = [
@@ -41,6 +42,7 @@ class _AdminPanelState extends State<AdminPanel> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
+    final isCompact = MediaQuery.of(context).size.width < 900;
 
     if (!authProvider.isAdmin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,14 +63,15 @@ class _AdminPanelState extends State<AdminPanel> {
     }
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFF121212),
       body: Row(
         children: [
-          _buildSidebar(),
+          if (!isCompact) _buildSidebar(),
           Expanded(
             child: Column(
               children: [
-                _buildTopBar(),
+                _buildTopBar(isCompact),
                 Expanded(
                   child: _pages[_selectedIndex],
                 ),
@@ -76,6 +79,78 @@ class _AdminPanelState extends State<AdminPanel> {
             ),
           ),
         ],
+      ),
+      drawer: isCompact ? _buildDrawer() : null,
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: Colors.black,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.content_cut, color: Color(0xFFD4AF37), size: 28),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'GOLDEN\nSCISSORS',
+                    style: TextStyle(
+                      fontFamily: 'Playfair Display',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 2,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            const SizedBox(height: 12),
+            ...List.generate(
+              _titles.length,
+              (index) => ListTile(
+                leading: Icon(
+                  _icons[index],
+                  color: _selectedIndex == index
+                      ? const Color(0xFFD4AF37)
+                      : Colors.white54,
+                ),
+                title: Text(
+                  _titles[index],
+                  style: TextStyle(
+                    color: _selectedIndex == index
+                        ? const Color(0xFFD4AF37)
+                        : Colors.white70,
+                    fontWeight: _selectedIndex == index
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                selected: _selectedIndex == index,
+                onTap: () {
+                  setState(() => _selectedIndex = index);
+                  _scaffoldKey.currentState?.closeDrawer();
+                },
+              ),
+            ),
+            const Spacer(),
+            const Divider(color: Colors.white12, height: 1),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.white54),
+              title: const Text(
+                'Cerrar Sesión',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: _logout,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -171,38 +246,78 @@ class _AdminPanelState extends State<AdminPanel> {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(bool isCompact) {
     final authProvider = context.watch<AuthProvider>();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 16 : 32,
+        vertical: 16,
+      ),
       decoration: const BoxDecoration(
         color: Color(0xFF1E1E1E),
         border: Border(bottom: BorderSide(color: Colors.white10)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            _titles[_selectedIndex],
-            style: const TextStyle(
-              fontFamily: 'Playfair Display',
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              letterSpacing: 1,
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (isCompact)
+                  IconButton(
+                    icon: const Icon(Icons.menu, color: Color(0xFFD4AF37)),
+                    tooltip: 'Abrir menú',
+                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  ),
+                if (isCompact) const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _titles[_selectedIndex],
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Playfair Display',
+                      fontSize: isCompact ? 18 : 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Row(
-            children: [
-              const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37), size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Admin: ${authProvider.nombreCompleto}',
-                style: const TextStyle(color: Colors.white60, fontSize: 14),
-              ),
-            ],
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37), size: 20),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Admin: ${authProvider.nombreCompleto}',
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: isCompact ? 12 : 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _logout() {
+    context.read<AuthProvider>().logout();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => const HomeScreen(firebaseInitialized: true),
       ),
     );
   }

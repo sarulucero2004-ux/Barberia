@@ -81,12 +81,13 @@ class _AgendaTabState extends State<AgendaTab> {
   @override
   Widget build(BuildContext context) {
     final adminProvider = context.read<AdminProvider>();
+    final isCompact = MediaQuery.of(context).size.width < 700;
     // Cada administrador administra únicamente su propio barbero. El `barberId`
     // sale del documento de `usuarios` (mismo campo que ya usan los turnos).
     final adminBarberId = context.watch<AuthProvider>().barberId;
 
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isCompact ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -177,6 +178,12 @@ class _AgendaTabState extends State<AgendaTab> {
   }
 
   Widget _buildDateNavigator() {
+    final isCompact = MediaQuery.of(context).size.width < 600;
+    final month = _monthsFull[_selectedDate.month - 1];
+    final dateLabel = isCompact
+        ? '${_selectedDate.day} de ${month.substring(0, 3)} de ${_selectedDate.year}'
+        : _formattedDate;
+
     return Row(
       children: [
         IconButton(
@@ -187,32 +194,42 @@ class _AgendaTabState extends State<AgendaTab> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70),
           onPressed: _previousDay,
         ),
-        const SizedBox(width: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.calendar_today, color: Color(0xFFD4AF37), size: 20),
-              const SizedBox(width: 12),
-              Text(
-                _formattedDate,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Playfair Display',
+        const SizedBox(width: 4),
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 8 : 24,
+              vertical: 12,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.calendar_today, color: Color(0xFFD4AF37), size: 20),
+                SizedBox(width: isCompact ? 6 : 12),
+                Flexible(
+                  child: Text(
+                    dateLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: isCompact ? 14 : 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Playfair Display',
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 4),
         IconButton(
           style: IconButton.styleFrom(
             backgroundColor: Colors.white12,
