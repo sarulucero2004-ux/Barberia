@@ -7,6 +7,7 @@ class Appointment {
   final String? userId;
   final String customerName;
   final String customerEmail;
+  final String customerPhone;
   final String barberId;
   final String barberName;
   final String barberPhone;
@@ -24,6 +25,7 @@ class Appointment {
     this.userId,
     required this.customerName,
     required this.customerEmail,
+    this.customerPhone = '',
     required this.barberId,
     required this.barberName,
     required this.barberPhone,
@@ -42,6 +44,7 @@ class Appointment {
       'userId': userId,
       'customerName': customerName,
       'customerEmail': customerEmail,
+      'customerPhone': customerPhone,
       'barberId': barberId,
       'barberName': barberName,
       'barberPhone': barberPhone,
@@ -61,6 +64,7 @@ class Appointment {
       userId: map['userId'],
       customerName: map['customerName'] ?? '',
       customerEmail: map['customerEmail'] ?? '',
+      customerPhone: map['customerPhone'] ?? '',
       barberId: map['barberId'] ?? '',
       barberName: map['barberName'] ?? '',
       barberPhone: map['barberPhone'] ?? '',
@@ -86,6 +90,7 @@ class Appointment {
     String? userId,
     String? customerName,
     String? customerEmail,
+    String? customerPhone,
     String? barberId,
     String? barberName,
     String? barberPhone,
@@ -103,6 +108,7 @@ class Appointment {
       userId: userId ?? this.userId,
       customerName: customerName ?? this.customerName,
       customerEmail: customerEmail ?? this.customerEmail,
+      customerPhone: customerPhone ?? this.customerPhone,
       barberId: barberId ?? this.barberId,
       barberName: barberName ?? this.barberName,
       barberPhone: barberPhone ?? this.barberPhone,

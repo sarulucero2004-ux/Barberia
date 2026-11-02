@@ -92,6 +92,7 @@ service cloud.firestore {
           && request.resource.data.userId is string
           && request.resource.data.customerName is string
           && request.resource.data.customerEmail is string
+          && request.resource.data.customerPhone is string
           && request.resource.data.barberId is string
           && request.resource.data.barberName is string
           && request.resource.data.barberPhone is string
@@ -105,7 +106,7 @@ service cloud.firestore {
           && request.resource.data.appointmentDateTime is timestamp
           && request.resource.data.keys().hasOnly([
             'userId', 'customerName', 'customerEmail', 'barberId',
-            'barberName', 'barberPhone', 'serviceId', 'serviceName',
+            'customerPhone', 'barberName', 'barberPhone', 'serviceId', 'serviceName',
             'servicePrice', 'date', 'time', 'startTime', 'status',
             'appointmentDateTime', 'timestamp'
           ])
@@ -116,6 +117,10 @@ service cloud.firestore {
           && request.resource.data.barberId == miBarberId()
           && request.resource.data.customerName is string
           && request.resource.data.customerEmail is string
+          && (
+            !request.resource.data.keys().hasAny(['customerPhone'])
+            || request.resource.data.customerPhone is string
+          )
           && request.resource.data.barberId is string
           && request.resource.data.barberName is string
           && request.resource.data.barberPhone is string
@@ -131,7 +136,7 @@ service cloud.firestore {
           && request.resource.data.appointmentDateTime is timestamp
           && request.resource.data.keys().hasOnly([
             'userId', 'customerName', 'customerEmail', 'barberId',
-            'barberName', 'barberPhone', 'serviceId', 'serviceName',
+            'customerPhone', 'barberName', 'barberPhone', 'serviceId', 'serviceName',
             'servicePrice', 'date', 'time', 'startTime', 'status',
             'appointmentDateTime', 'timestamp'
           ])

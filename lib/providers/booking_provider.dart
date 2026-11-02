@@ -44,6 +44,7 @@ class BookingProvider extends ChangeNotifier {
 
   Barber? _pendingBarber;
   Service? _pendingService;
+  String? _pendingCustomerPhone;
   String? _pendingDate;
   String? _pendingTime;
 
@@ -82,9 +83,15 @@ class BookingProvider extends ChangeNotifier {
 
   Barber? get pendingBarber => _pendingBarber;
   Service? get pendingService => _pendingService;
+  String? get pendingCustomerPhone => _pendingCustomerPhone;
   String? get pendingDate => _pendingDate;
   String? get pendingTime => _pendingTime;
-  bool get hasPendingBooking => _pendingBarber != null && _pendingService != null && _pendingDate != null && _pendingTime != null;
+  bool get hasPendingBooking =>
+      _pendingBarber != null &&
+      _pendingService != null &&
+      _pendingCustomerPhone != null &&
+      _pendingDate != null &&
+      _pendingTime != null;
 
   BookingProvider({
     required BookingService bookingService,
@@ -158,6 +165,7 @@ class BookingProvider extends ChangeNotifier {
     if (user != null && hasPendingBooking) {
       final barber = _pendingBarber!;
       final service = _pendingService!;
+      final customerPhone = _pendingCustomerPhone!;
       final date = _pendingDate!;
       final time = _pendingTime!;
 
@@ -175,6 +183,7 @@ class BookingProvider extends ChangeNotifier {
           userId: user.uid,
           customerName: name.isNotEmpty ? name : email,
           customerEmail: email,
+          customerPhone: customerPhone,
           barber: barber,
           service: service,
           date: date,
@@ -189,11 +198,13 @@ class BookingProvider extends ChangeNotifier {
   void saveTemporaryBooking({
     required Barber barber,
     required Service service,
+    required String customerPhone,
     required String date,
     required String time,
   }) {
     _pendingBarber = barber;
     _pendingService = service;
+    _pendingCustomerPhone = customerPhone;
     _pendingDate = date;
     _pendingTime = time;
     notifyListeners();
@@ -202,6 +213,7 @@ class BookingProvider extends ChangeNotifier {
   void clearPendingBooking() {
     _pendingBarber = null;
     _pendingService = null;
+    _pendingCustomerPhone = null;
     _pendingDate = null;
     _pendingTime = null;
     notifyListeners();
@@ -276,6 +288,7 @@ class BookingProvider extends ChangeNotifier {
     required String userId,
     required String customerName,
     required String customerEmail,
+    required String customerPhone,
     required Barber barber,
     required Service service,
     required String date,
@@ -309,6 +322,7 @@ class BookingProvider extends ChangeNotifier {
         userId: userId,
         customerName: customerName,
         customerEmail: customerEmail,
+        customerPhone: customerPhone,
         barber: barber,
         service: service,
         date: date,
@@ -320,6 +334,7 @@ class BookingProvider extends ChangeNotifier {
         userId: userId,
         customerName: customerName,
         customerEmail: customerEmail,
+        customerPhone: customerPhone,
         barberId: barber.id,
         barberName: barber.name,
         barberPhone: barber.phone,

@@ -603,7 +603,7 @@ class FirestoreService {
         // rechazan en vez de perderse silenciosamente.
         const allowedKeys = {
           'userId', 'customerName', 'customerEmail', 'barberId',
-          'barberName', 'barberPhone', 'serviceId', 'serviceName',
+          'customerPhone', 'barberName', 'barberPhone', 'serviceId', 'serviceName',
           'servicePrice', 'date', 'time', 'startTime', 'status',
           'appointmentDateTime', 'timestamp',
         };

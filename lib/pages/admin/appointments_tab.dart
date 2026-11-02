@@ -5,6 +5,7 @@ import '../../providers/admin_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/appointment_status.dart';
 import '../../models/appointment.dart';
+import '../../services/whatsapp_service.dart';
 
 class AppointmentsTab extends StatefulWidget {
   const AppointmentsTab({super.key});
@@ -267,7 +268,7 @@ class _AppointmentCard extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildAppointmentDetails(),
+                  _buildAppointmentDetails(context),
                   const SizedBox(height: 12),
                   Wrap(
                     alignment: WrapAlignment.end,
@@ -285,7 +286,7 @@ class _AppointmentCard extends StatelessWidget {
               )
             : Row(
                 children: [
-                  Expanded(flex: 3, child: _buildAppointmentDetails()),
+                  Expanded(flex: 3, child: _buildAppointmentDetails(context)),
                   const SizedBox(width: 16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -306,7 +307,7 @@ class _AppointmentCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAppointmentDetails() {
+  Widget _buildAppointmentDetails(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -321,9 +322,65 @@ class _AppointmentCard extends StatelessWidget {
         const SizedBox(height: 6),
         _detailRow(Icons.content_cut, 'Servicio', appointment.serviceName),
         _detailRow(Icons.person, 'Barbero', appointment.barberName),
+        if (appointment.customerPhone.trim().isNotEmpty)
+          _customerPhoneRow(context),
         _detailRow(Icons.calendar_today, 'Fecha', appointment.date),
         _detailRow(Icons.access_time, 'Hora', appointment.time),
       ],
+    );
+  }
+
+  Widget _customerPhoneRow(BuildContext context) {
+    final phone = appointment.customerPhone.trim();
+    final whatsAppService = WhatsAppService();
+    final chatUri = whatsAppService.buildCustomerChatUri(phone);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.phone, size: 14, color: Colors.white38),
+          const SizedBox(width: 8),
+          const Text(
+            'Teléfono: ',
+            style: TextStyle(color: Colors.white38, fontSize: 13),
+          ),
+          Expanded(
+            child: Text(
+              phone,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+          IconButton(
+            tooltip: chatUri == null
+                ? 'Teléfono no válido para WhatsApp'
+                : 'Abrir WhatsApp',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              Icons.chat,
+              size: 18,
+              color: chatUri == null ? Colors.white24 : const Color(0xFF25D366),
+            ),
+            onPressed: chatUri == null
+                ? null
+                : () async {
+                    final result = await whatsAppService.openCustomerChat(
+                      phone,
+                    );
+                    if (!context.mounted || result.success) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result.message),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  },
+          ),
+        ],
+      ),
     );
   }
 

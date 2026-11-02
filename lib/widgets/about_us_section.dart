@@ -39,7 +39,7 @@ class AboutUsSection extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'LOS AMIGOS',
+                'LOS AMIGOS DE LA BARBER',
                 style: TextStyle(
                   fontFamily: 'Playfair Display',
                   fontSize: 32,

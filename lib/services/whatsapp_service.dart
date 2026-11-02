@@ -17,6 +17,11 @@ class WhatsAppResult {
             'Se abrió WhatsApp con el mensaje preparado. Presioná "Enviar" en WhatsApp para avisarle al barbero.',
       );
 
+  factory WhatsAppResult.chatOpened() => const WhatsAppResult(
+        success: true,
+        message: 'Se abrió WhatsApp para iniciar el chat con el cliente.',
+      );
+
   factory WhatsAppResult.error(String message) => WhatsAppResult(
         success: false,
         message: message,
@@ -87,6 +92,55 @@ class WhatsAppService {
 
     // No se pudo determinar con seguridad un formato válido
     return null;
+  }
+
+  bool isValidPhoneForWhatsApp(String? rawPhone) {
+    if (rawPhone == null || rawPhone.trim().isEmpty) return false;
+    final phone = rawPhone.trim();
+    if (!RegExp(r'^(?:\+|00)?[0-9\s().-]+$').hasMatch(phone)) {
+      return false;
+    }
+    return formatPhoneForWhatsApp(phone) != null;
+  }
+
+  Uri? buildCustomerChatUri(String? rawPhone) {
+    if (!isValidPhoneForWhatsApp(rawPhone)) return null;
+    final phone = formatPhoneForWhatsApp(rawPhone);
+    if (phone == null) return null;
+    return Uri.parse('https://wa.me/$phone');
+  }
+
+  Future<WhatsAppResult> openCustomerChat(String? rawPhone) async {
+    final url = buildCustomerChatUri(rawPhone);
+    if (url == null) {
+      return WhatsAppResult.error(
+        'El teléfono del cliente no tiene un formato válido para WhatsApp.',
+      );
+    }
+
+    try {
+      final canOpen = await canLaunchUrl(url);
+      if (!canOpen) {
+        return WhatsAppResult.error(
+          'No se pudo abrir WhatsApp. El sistema o navegador no reconoce el enlace.',
+        );
+      }
+
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (launched) return WhatsAppResult.chatOpened();
+
+      final fallbackLaunched = await launchUrl(url);
+      if (fallbackLaunched) return WhatsAppResult.chatOpened();
+
+      return WhatsAppResult.error(
+        'No se pudo abrir WhatsApp. Verificá si el navegador bloqueó la ventana emergente.',
+      );
+    } catch (e) {
+      debugPrint('Error al abrir WhatsApp del cliente: $e');
+      return WhatsAppResult.error(
+        'Ocurrió un error al intentar abrir WhatsApp ($e). Verificá los permisos del navegador.',
+      );
+    }
   }
 
   /// Remueve el prefijo móvil '15' si está después del código de área (2, 3 o 4 dígitos)

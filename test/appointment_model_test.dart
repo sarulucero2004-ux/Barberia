@@ -14,6 +14,7 @@ Appointment _appointment({
     userId: 'clientA',
     customerName: 'Cliente',
     customerEmail: 'cliente@test.local',
+    customerPhone: '+54 9 11 1234-5678',
     barberId: 'B1',
     barberName: 'Barbero',
     barberPhone: '3000000000',
@@ -140,7 +141,18 @@ void main() {
 
       expect(appointment.createdAt, timestamp.toDate());
       expect(appointment.appointmentDateTime, DateTime(2026, 10, 10, 10, 0));
+      expect(appointment.customerPhone, '');
       expect(appointment.hasConsistentAppointmentDateTime(), isTrue);
     });
+  });
+
+  test('guarda el teléfono del cliente en el mapa del turno', () {
+    final appointment = _appointment();
+
+    expect(appointment.toMap()['customerPhone'], '+54 9 11 1234-5678');
+    expect(
+      Appointment.fromMap(appointment.toMap(), appointment.id).customerPhone,
+      '+54 9 11 1234-5678',
+    );
   });
 }

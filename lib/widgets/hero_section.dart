@@ -159,9 +159,9 @@ class _HeroSectionState extends State<HeroSection>
                       child: Text.rich(
                         TextSpan(
                           children: [
-                            const TextSpan(text: 'CORTES CON\n'),
+                            const TextSpan(text: 'BIENVENIDOS\n'),
                             TextSpan(
-                              text: 'ACTITUD.',
+                              text: 'CLIENTES.',
                               style: TextStyle(
                                 color: const Color(0xFFE5C65A),
                                 shadows: [

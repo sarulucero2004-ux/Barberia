@@ -29,6 +29,7 @@ class BookingForm extends StatefulWidget {
 
 class _BookingFormState extends State<BookingForm> {
   final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
 
   Service? _selectedService;
   Barber? _selectedBarber;
@@ -123,6 +124,7 @@ class _BookingFormState extends State<BookingForm> {
 
   @override
   void dispose() {
+    _phoneController.dispose();
     _carouselScrollController.dispose();
     _timeScrollController.dispose();
     super.dispose();
@@ -241,6 +243,7 @@ class _BookingFormState extends State<BookingForm> {
         userId: authProvider.uid,
         customerName: customerName,
         customerEmail: authProvider.email,
+        customerPhone: _phoneController.text.trim(),
         barber: _selectedBarber!,
         service: _selectedService!,
         date: formattedDate,
@@ -256,6 +259,7 @@ class _BookingFormState extends State<BookingForm> {
         userId: authProvider.uid,
         customerName: customerName,
         customerEmail: authProvider.email,
+        customerPhone: _phoneController.text.trim(),
         barberId: _selectedBarber!.id,
         barberName: _selectedBarber!.name,
         barberPhone: _selectedBarber!.phone,
@@ -446,6 +450,8 @@ class _BookingFormState extends State<BookingForm> {
                         ],
                       ),
 
+                const SizedBox(height: 24),
+                _buildCustomerPhoneField(),
                 const SizedBox(height: 32),
 
                 const Text(
@@ -891,6 +897,26 @@ class _BookingFormState extends State<BookingForm> {
         setState(() {
           _selectedService = selected;
         });
+      },
+    );
+  }
+
+  Widget _buildCustomerPhoneField() {
+    return TextFormField(
+      controller: _phoneController,
+      keyboardType: TextInputType.phone,
+      style: const TextStyle(color: Colors.white),
+      decoration: _inputDecoration('Teléfono del cliente', Icons.phone).copyWith(
+        hintText: '+54 9 11 1234-5678',
+        hintStyle: const TextStyle(color: Colors.white38),
+      ),
+      validator: (value) {
+        final phone = value?.trim() ?? '';
+        if (phone.isEmpty) return 'Ingresá tu teléfono.';
+        if (!WhatsAppService().isValidPhoneForWhatsApp(phone)) {
+          return 'Ingresá un teléfono válido con código de país.';
+        }
+        return null;
       },
     );
   }
